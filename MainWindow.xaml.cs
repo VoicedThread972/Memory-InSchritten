@@ -84,6 +84,32 @@ namespace Memory_InSchritten
             }
         }
 
+        private void PlaceCards()
+        {
+            var index = -1;
+            for (var i = 1; i < Grid.ColumnDefinitions.Count - 1; i++)
+            {
+                for (var j = 0; j < Grid.RowDefinitions.Count; j++)
+                {
+                    if (++index >= Cards.Count) return;
+
+                    var btn = new Button
+                    {
+                        Content = Cards[index],
+                        Background = new ImageBrush(new BitmapImage(new Uri(Cards[index]))),
+                        Foreground = Brushes.Transparent,
+                        BorderBrush = Brushes.Black,
+                        BorderThickness = new Thickness(1),
+                    };
+
+                    btn.SetValue(Grid.ColumnProperty, i);
+                    btn.SetValue(Grid.RowProperty, j);
+
+                    Grid.Children.Add(btn);
+                }
+            }
+        }
+
         private void Reset()
         {
             Player1.Score.Content = "0";
@@ -99,6 +125,8 @@ namespace Memory_InSchritten
             LoadCards();
 
             Shuffle();
+
+            PlaceCards();
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)

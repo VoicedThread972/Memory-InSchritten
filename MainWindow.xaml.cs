@@ -132,6 +132,9 @@ namespace Memory_InSchritten
                 }
             }
             player1turn = !player1turn;
+            Player1.Rect.Fill = player1turn ? Brushes.DeepSkyBlue : Brushes.LightGray;
+            Player2.Rect.Fill = player1turn ? Brushes.LightGray : Brushes.DeepSkyBlue;
+
             Open = [];
         }
 
@@ -140,13 +143,18 @@ namespace Memory_InSchritten
             Open = [];
             MessageBox.Show("Paar gefunden", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
 
-            if (player1turn && int.TryParse(Player1.Score.Content.ToString() ?? "", out var score))
+            if (int.TryParse(Player1.Score.Content.ToString() ?? "", out var score1) && int.TryParse(Player2.Score.Content.ToString() ?? "", out var score2))
             {
-                Player1.Score.Content = (score + 1).ToString();
-            }
-            else if (int.TryParse(Player2.Score.Content.ToString() ?? "", out score))
-            {
-                Player2.Score.Content = (score + 1).ToString();
+                if ((player1turn ? ++score1 + score2 : ++score2 + score1) >= Cards.Count / 2)
+                {
+                    Player1.Score.Content = score1;
+                    Player2.Score.Content = score2;
+                    MessageBox.Show($"Spiel beendet!{Environment.NewLine}{(score1 > score2 ? Player1.PlayerName.Text : score1 < score2 ? Player2.PlayerName.Text : "Niemand")} gewinnt");
+                    Reset();
+                    return;
+                }
+                Player1.Score.Content = score1;
+                Player2.Score.Content = score2;
             }
         }
 
@@ -169,6 +177,8 @@ namespace Memory_InSchritten
         private void Reset()
         {
             player1turn = true;
+            Player1.Rect.Fill = Brushes.DeepSkyBlue;
+            Player2.Rect.Fill = Brushes.LightGray;
 
             Player1.Score.Content = "0";
             Player2.Score.Content = "0";
@@ -177,12 +187,9 @@ namespace Memory_InSchritten
             Cards = [];
             Open = [];
 
-            foreach (var child in Grid.Children)
+            foreach (var child in Grid.Children.OfType<Button>().ToList())
             {
-                if (child is Button btn)
-                {
-                    Grid.Children.Remove(btn);
-                }
+                Grid.Children.Remove(child);
             }
 
             SetNames();

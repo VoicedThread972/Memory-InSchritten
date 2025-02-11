@@ -10,8 +10,8 @@
         <Rectangle x:Name="Rect" Fill="DeepSkyBlue"/>
         <StackPanel x:Name="Panel" Margin="10">
             <Label x:Name="Title" Content="Spieler" HorizontalAlignment="Center"/>
-            <TextBox x:Name="PlayerName" Text="Testname" IsReadOnly="True" Background="LightGray" HorizontalContentAlignment="Center"/>
-            <Label x:Name="Score" Content="0" HorizontalAlignment="Center"/>
+            <TextBox x:Name="PlayerName" IsReadOnly="True" Background="LightGray" HorizontalContentAlignment="Center"/>
+            <Label x:Name="Score" HorizontalAlignment="Center"/>
         </StackPanel>
     </Grid>
 </UserControl>

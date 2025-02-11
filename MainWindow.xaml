@@ -6,6 +6,7 @@
         xmlns:local="clr-namespace:Memory_InSchritten"
         xmlns:userControls="clr-namespace:Memory_InSchritten.UserControls"
         mc:Ignorable="d"
+        Loaded="Window_Loaded"
         Title="MainWindow" Height="450" Width="800">
     <Grid>
         <Grid.ColumnDefinitions>
@@ -23,7 +24,7 @@
             <RowDefinition/>
             <RowDefinition/>
         </Grid.RowDefinitions>
-        <userControls:Player Grid.Column="0" Grid.RowSpan="4" Grid.Row="0"/>
-        <userControls:Player Grid.Column="6" Grid.RowSpan="4" Grid.Row="0"/>
+        <userControls:Player x:Name="Player1" Grid.Column="0" Grid.RowSpan="4" Grid.Row="0"/>
+        <userControls:Player x:Name="Player2" Grid.Column="6" Grid.RowSpan="4" Grid.Row="0"/>
     </Grid>
 </Window>

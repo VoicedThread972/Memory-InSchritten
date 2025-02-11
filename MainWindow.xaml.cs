@@ -23,6 +23,8 @@ namespace Memory_InSchritten
     {
         private string cardPath = "";
 
+        private bool player1turn = true;
+
         private List<string> Open = [];
 
         private ImageBrush Covered = new ImageBrush(new BitmapImage(new Uri(Directory.GetCurrentDirectory() + @"\bilder\starsolid.gif")));
@@ -129,7 +131,23 @@ namespace Memory_InSchritten
                     btn.Focusable = true;
                 }
             }
+            player1turn = !player1turn;
             Open = [];
+        }
+
+        private void CardPair()
+        {
+            Open = [];
+            MessageBox.Show("Paar gefunden", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            if (player1turn && int.TryParse(Player1.Score.Content.ToString() ?? "", out var score))
+            {
+                Player1.Score.Content = (score + 1).ToString();
+            }
+            else if (int.TryParse(Player2.Score.Content.ToString() ?? "", out score))
+            {
+                Player2.Score.Content = (score + 1).ToString();
+            }
         }
 
         private void ShowCard(object sender, RoutedEventArgs e)
@@ -141,11 +159,17 @@ namespace Memory_InSchritten
             btn.Background = new ImageBrush(new BitmapImage(new Uri(btn.Content.ToString() ?? "")));
             btn.IsHitTestVisible = false;
             btn.Focusable = false;
-            if (Open.Count >= 2) CoverCards();
+            if (Open.Count >= 2)
+            {
+                if (Open[0] == Open[1]) CardPair();
+                else CoverCards();
+            }
         }
 
         private void Reset()
         {
+            player1turn = true;
+
             Player1.Score.Content = "0";
             Player2.Score.Content = "0";
 

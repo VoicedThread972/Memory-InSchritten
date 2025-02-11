@@ -183,7 +183,7 @@ namespace Memory_InSchritten
             Player1.Score.Content = "0";
             Player2.Score.Content = "0";
 
-            cardPath = Directory.GetCurrentDirectory() + @"\bilder\";
+            cardPath = Directory.GetCurrentDirectory() + @"\bilder\markus";
             Cards = [];
             Open = [];
 

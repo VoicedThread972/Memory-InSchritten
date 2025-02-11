@@ -48,7 +48,7 @@ namespace Memory_InSchritten.UserControls
                 var fstr = label.FontStretch;
                 var typeFont = new Typeface(ff, fs, fw, fstr);
                 var maxWidth = Rect.ActualWidth - (Border.BorderThickness.Left + Border.BorderThickness.Right + 20);
-                var maxHeight = (Rect.ActualHeight - (Panel.Margin.Top + Panel.Margin.Bottom + Border.BorderThickness.Top + Border.BorderThickness.Bottom)) / 2;
+                var maxHeight = (Rect.ActualHeight - (Panel.Margin.Top + Panel.Margin.Bottom + Border.BorderThickness.Top + Border.BorderThickness.Bottom)) / 3.0;
                 return CalcFontSize(s, maxWidth, maxHeight, typeFont); // Title, Score
             }
             return 20;

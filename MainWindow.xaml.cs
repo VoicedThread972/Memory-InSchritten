@@ -2,6 +2,7 @@
 using Microsoft.VisualBasic;
 using System;
 using System.IO;
+using System.Reflection;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -21,6 +22,8 @@ namespace Memory_InSchritten
     public partial class MainWindow : Window
     {
         private string cardPath = "";
+
+        private ImageBrush Covered = new ImageBrush(new BitmapImage(new Uri(Directory.GetCurrentDirectory() + @"\bilder\starsolid.gif")));
 
         private List<string> Cards = [];
         public MainWindow()
@@ -96,7 +99,7 @@ namespace Memory_InSchritten
                     var btn = new Button
                     {
                         Content = Cards[index],
-                        Background = new ImageBrush(new BitmapImage(new Uri(Cards[index]))),
+                        Background = Covered,
                         Foreground = Brushes.Transparent,
                         BorderBrush = Brushes.Black,
                         BorderThickness = new Thickness(1),
@@ -105,9 +108,21 @@ namespace Memory_InSchritten
                     btn.SetValue(Grid.ColumnProperty, i);
                     btn.SetValue(Grid.RowProperty, j);
 
+                    btn.Click += ShowCard;
+
                     Grid.Children.Add(btn);
                 }
             }
+        }
+
+        private void ShowCard(object sender, RoutedEventArgs e)
+        {
+            Button? btn = sender as Button;
+            if (btn is null) return;
+
+            btn.Background = new ImageBrush(new BitmapImage(new Uri(btn.Content.ToString() ?? "")));
+            btn.IsHitTestVisible = false;
+            btn.Focusable = false;
         }
 
         private void Reset()

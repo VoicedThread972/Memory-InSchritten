@@ -1,5 +1,6 @@
 ﻿using Memory_InSchritten.UserControls;
 using Microsoft.VisualBasic;
+using System;
 using System.IO;
 using System.Text;
 using System.Windows;
@@ -20,6 +21,8 @@ namespace Memory_InSchritten
     public partial class MainWindow : Window
     {
         private string cardPath = "";
+
+        private List<string> Cards = [];
         public MainWindow()
         {
             InitializeComponent();
@@ -60,16 +63,42 @@ namespace Memory_InSchritten
             }
         }
 
+        private void Shuffle()
+        {
+            var rnd = new Random();
+            for (var i = 0; i < Cards.Count; i++)
+            {
+                var index = rnd.Next(Cards.Count);
+                (Cards[i], Cards[index]) = (Cards[index], Cards[i]);
+            }
+        }
+
+        private void LoadCards()
+        {
+            var index = 0;
+            foreach (var file in Directory.GetFiles(cardPath))
+            {
+                if (++index > 10) break;
+                Cards.Add(file);
+                Cards.Add(file);
+            }
+        }
+
         private void Reset()
         {
             Player1.Score.Content = "0";
             Player2.Score.Content = "0";
 
             cardPath = Directory.GetCurrentDirectory() + @"\bilder\";
+            Cards = [];
 
             SetNames();
 
             SetCards();
+
+            LoadCards();
+
+            Shuffle();
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)

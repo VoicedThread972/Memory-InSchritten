@@ -9,4 +9,174 @@
     <UseWPF>true</UseWPF>
   </PropertyGroup>
 
+  <ItemGroup>
+    <None Remove="bilder\comics\asterix.png" />
+    <None Remove="bilder\comics\biene-maja.png" />
+    <None Remove="bilder\comics\garfield.png" />
+    <None Remove="bilder\comics\homer-simpson.png" />
+    <None Remove="bilder\comics\lucky-luke.png" />
+    <None Remove="bilder\comics\maulwurf.png" />
+    <None Remove="bilder\comics\mickey-mouse.png" />
+    <None Remove="bilder\comics\sponge-bob.png" />
+    <None Remove="bilder\comics\tim-und-struppi.png" />
+    <None Remove="bilder\comics\tweety.png" />
+    <None Remove="bilder\harrypotter\dumbledore.jpg" />
+    <None Remove="bilder\harrypotter\hagrid.jpg" />
+    <None Remove="bilder\harrypotter\harry.jpg" />
+    <None Remove="bilder\harrypotter\hermione.jpg" />
+    <None Remove="bilder\harrypotter\malfoy.jpg" />
+    <None Remove="bilder\harrypotter\neville.jpg" />
+    <None Remove="bilder\harrypotter\rogue.jpg" />
+    <None Remove="bilder\harrypotter\ron.jpg" />
+    <None Remove="bilder\harrypotter\sirius.jpg" />
+    <None Remove="bilder\harrypotter\voldemort.jpg" />
+    <None Remove="bilder\markus\0_big.jpg" />
+    <None Remove="bilder\markus\bg,f8f8f8-flat,750x,075,f-pad,750x1000,f8f8f8.jpg" />
+    <None Remove="bilder\markus\images.jpg" />
+    <None Remove="bilder\markus\images1.jpg" />
+    <None Remove="bilder\markus\IMG_7110-Shirt-weiss-schwer-und-falsch.jpg" />
+    <None Remove="bilder\markus\IMG_9222_not-vegan_shop_514_0.jpg" />
+    <None Remove="bilder\markus\maenner-t-shirt.jpg" />
+    <None Remove="bilder\markus\maxresdefault.jpg" />
+    <None Remove="bilder\markus\wie-alt-ist-markus-rühl.jpg" />
+    <None Remove="bilder\markus\x272dcn8e5db1.jpg" />
+    <None Remove="bilder\popstars\billie-eilish.png" />
+    <None Remove="bilder\popstars\drake.png" />
+    <None Remove="bilder\popstars\ed-sheeran.png" />
+    <None Remove="bilder\popstars\harry-styles.png" />
+    <None Remove="bilder\popstars\katy-perry.png" />
+    <None Remove="bilder\popstars\mark-forster.png" />
+    <None Remove="bilder\popstars\niko-santos.png" />
+    <None Remove="bilder\popstars\pink.png" />
+    <None Remove="bilder\popstars\rihanna.png" />
+    <None Remove="bilder\popstars\taylor-swift.png" />
+    <None Remove="bilder\starsolid.gif" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="bilder\comics\asterix.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\comics\biene-maja.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\comics\garfield.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\comics\homer-simpson.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\comics\lucky-luke.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\comics\maulwurf.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\comics\mickey-mouse.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\comics\sponge-bob.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\comics\tim-und-struppi.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\comics\tweety.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\harrypotter\dumbledore.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\harrypotter\hagrid.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\harrypotter\harry.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\harrypotter\hermione.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\harrypotter\malfoy.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\harrypotter\neville.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\harrypotter\rogue.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\harrypotter\ron.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\harrypotter\sirius.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\harrypotter\voldemort.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\markus\0_big.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\markus\bg,f8f8f8-flat,750x,075,f-pad,750x1000,f8f8f8.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\markus\images.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\markus\images1.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\markus\IMG_7110-Shirt-weiss-schwer-und-falsch.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\markus\IMG_9222_not-vegan_shop_514_0.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\markus\maenner-t-shirt.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\markus\maxresdefault.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\markus\wie-alt-ist-markus-rühl.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\markus\x272dcn8e5db1.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\popstars\billie-eilish.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\popstars\drake.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\popstars\ed-sheeran.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\popstars\harry-styles.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\popstars\katy-perry.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\popstars\mark-forster.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\popstars\niko-santos.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\popstars\pink.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\popstars\rihanna.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\popstars\taylor-swift.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="bilder\starsolid.gif">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

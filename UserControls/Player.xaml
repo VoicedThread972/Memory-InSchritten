@@ -1,0 +1,17 @@
+﻿<UserControl x:Class="Memory_InSchritten.UserControls.Player"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:Memory_InSchritten.UserControls"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800">
+    <Grid>
+        <Rectangle x:Name="Rect" Fill="DeepSkyBlue"/>
+        <StackPanel x:Name="Panel" Margin="10">
+            <Label x:Name="Title" Content="Spieler" HorizontalAlignment="Center"/>
+            <TextBox x:Name="PlayerName" Text="Testname" IsReadOnly="True" Background="LightGray" HorizontalContentAlignment="Center"/>
+            <Label x:Name="Score" Content="0" HorizontalAlignment="Center"/>
+        </StackPanel>
+    </Grid>
+</UserControl>

@@ -23,6 +23,8 @@ namespace Memory_InSchritten
     {
         private string cardPath = "";
 
+        private List<string> Open = [];
+
         private ImageBrush Covered = new ImageBrush(new BitmapImage(new Uri(Directory.GetCurrentDirectory() + @"\bilder\starsolid.gif")));
 
         private List<string> Cards = [];
@@ -115,14 +117,31 @@ namespace Memory_InSchritten
             }
         }
 
+        private void CoverCards()
+        {
+            MessageBox.Show("Die Karten werden gedeckt", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
+            foreach (var child in Grid.Children)
+            {
+                if (child is Button btn && Open.Contains(btn.Content.ToString() ?? ""))
+                {
+                    btn.Background = Covered;
+                    btn.IsHitTestVisible = true;
+                    btn.Focusable = true;
+                }
+            }
+            Open = [];
+        }
+
         private void ShowCard(object sender, RoutedEventArgs e)
         {
             Button? btn = sender as Button;
             if (btn is null) return;
 
+            Open.Add(btn.Content.ToString() ?? "");
             btn.Background = new ImageBrush(new BitmapImage(new Uri(btn.Content.ToString() ?? "")));
             btn.IsHitTestVisible = false;
             btn.Focusable = false;
+            if (Open.Count >= 2) CoverCards();
         }
 
         private void Reset()
@@ -132,6 +151,15 @@ namespace Memory_InSchritten
 
             cardPath = Directory.GetCurrentDirectory() + @"\bilder\";
             Cards = [];
+            Open = [];
+
+            foreach (var child in Grid.Children)
+            {
+                if (child is Button btn)
+                {
+                    Grid.Children.Remove(btn);
+                }
+            }
 
             SetNames();
 

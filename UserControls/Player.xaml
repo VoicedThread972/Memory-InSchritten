@@ -4,14 +4,25 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:Memory_InSchritten.UserControls"
-             mc:Ignorable="d" 
-             d:DesignHeight="450" d:DesignWidth="800">
-    <Grid>
-        <Rectangle x:Name="Rect" Fill="DeepSkyBlue"/>
+             mc:Ignorable="d"
+             d:DesignHeight="400" d:DesignWidth="100">
+    <Grid SizeChanged="Grid_SizeChanged">
+        <Rectangle x:Name="Rect"/>
+        <Border x:Name="Border" BorderThickness="3">
+            <Border.BorderBrush>
+                <VisualBrush>
+                    <VisualBrush.Visual>
+                        <Rectangle StrokeDashArray="2 1" Stroke="Black" StrokeThickness="3"
+                                   Width="{Binding RelativeSource={RelativeSource AncestorType={x:Type Border}}, Path=ActualWidth}"
+                                   Height="{Binding RelativeSource={RelativeSource AncestorType={x:Type Border}}, Path=ActualHeight}"/>
+                    </VisualBrush.Visual>
+                </VisualBrush>
+            </Border.BorderBrush>
+        </Border>
         <StackPanel x:Name="Panel" Margin="10">
             <Label x:Name="Title" Content="Spieler" HorizontalAlignment="Center"/>
-            <TextBox x:Name="PlayerName" IsReadOnly="True" Background="LightGray" HorizontalContentAlignment="Center"/>
-            <Label x:Name="Score" HorizontalAlignment="Center"/>
+            <TextBox x:Name="PlayerName" IsReadOnly="True" Background="LightGray" TextChanged="PlayerName_TextChanged" HorizontalContentAlignment="Center"/>
+            <Label x:Name="Score" Content="0" HorizontalAlignment="Center"/>
         </StackPanel>
     </Grid>
 </UserControl>

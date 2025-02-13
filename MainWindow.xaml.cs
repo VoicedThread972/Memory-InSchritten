@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Mail;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
@@ -39,10 +40,6 @@ namespace Memory_InSchritten
 
         private List<string> Open = [];
 
-        private UdpClient? _udpClient;
-
-        private const int DiscoveryPort = 5001;
-
         private const int GamePort = 5000;
 
         private TcpClient? _client;
@@ -59,11 +56,12 @@ namespace Memory_InSchritten
 
         private async Task Handshake()
         {
-            var msg = "";
             await SendString("READY");
-            while (!msg.Equals("READY"))
+            var msg = await ReadString();
+            if (!msg.Equals("READY"))
             {
-                msg = await ReadString();
+                MessageBox.Show("Verbindung Fehlgeschlagen", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
+                throw new NotImplementedException();
             }
         }
 
@@ -100,129 +98,155 @@ namespace Memory_InSchritten
 
         private async Task SendBytes(byte[] Object)
         {
-            if (_client is null)
+            try
+            {
+                NetworkStream stream = _client.GetStream();
+
+                await stream.FlushAsync();
+                await stream.WriteAsync(Object, 0, Object.Length);
+                await stream.FlushAsync();
+            }
+            catch
             {
                 MessageBox.Show("Die Verbindung wurde getrennt!", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
                 Reset();
-                return;
             }
-            NetworkStream stream = _client.GetStream();
-
-            await stream.FlushAsync();
-            await stream.WriteAsync(Object, 0, Object.Length);
-            await stream.FlushAsync();
         }
 
         private async Task<byte[]> ReadBytes(int expectedSize)
         {
-            if (_client is null)
+            try
+            {
+                NetworkStream stream = _client.GetStream();
+                byte[] buffer = new byte[expectedSize];
+                int totalRead = 0;
+
+                while (totalRead < expectedSize)
+                {
+                    int bytesRead = await stream.ReadAsync(buffer, totalRead, expectedSize - totalRead);
+                    if (bytesRead == 0)
+                    {
+                        MessageBox.Show("Verbindung verloren!", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
+                        Reset();
+                        return [];
+                    }
+                    totalRead += bytesRead;
+                }
+                return buffer;
+            }
+            catch
             {
                 MessageBox.Show("Die Verbindung wurde getrennt!", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
                 Reset();
                 return [];
             }
-
-            NetworkStream stream = _client.GetStream();
-            byte[] buffer = new byte[expectedSize];
-            int totalRead = 0;
-
-            while (totalRead < expectedSize)
-            {
-                int bytesRead = await stream.ReadAsync(buffer, totalRead, expectedSize - totalRead);
-                if (bytesRead == 0)
-                {
-                    MessageBox.Show("Verbindung verloren!", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
-                    Reset();
-                    return [];
-                }
-                totalRead += bytesRead;
-            }
-            return buffer;
         }
 
-        public async Task SearchOpponent()
+        static bool IsTcpPortInUse(int port)
         {
-#if DEBUG
-            _udpClient = new UdpClient(new IPEndPoint(IPAddress.Loopback, DiscoveryPort));
-#else
-            _udpClient = new UdpClient(new IPEndPoint(IPAddress.Any, DiscoveryPort)); // Allow reuse
-#endif
-
-            _udpClient.EnableBroadcast = true;
-            _udpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-
-            await RespondToDiscoveryRequests();
-
-            var searchingDialog = new SearchingDialog
-            {
-                Text =
-                {
-                    Text = "Suche nach Gegner im lokalen Netzwerk..."
-                }
-            };
-            searchingDialog.Show();
+            bool isInUse = false;
 
             try
             {
-#if DEBUG
-                IPEndPoint broadcastEP = new IPEndPoint(IPAddress.Loopback, DiscoveryPort);
-#else
-                IPEndPoint broadcastEP = new IPEndPoint(IPAddress.Broadcast, DiscoveryPort);
-#endif
-                byte[] requestMessage = "FIND_OPPONENT"u8.ToArray();
-
-                _udpClient.Send(requestMessage, requestMessage.Length, broadcastEP);
-
-                var receiveTask = _udpClient.ReceiveAsync();
-                if (await Task.WhenAny(receiveTask, Task.Delay(3000)) == receiveTask)
-                {
-                    IPEndPoint opponentEP = receiveTask.Result.RemoteEndPoint;
-                    string response = Encoding.UTF8.GetString(receiveTask.Result.Buffer);
-
-                    if (response == "OPPONENT_FOUND")
-                    {
-                        isHost = false;
-                        searchingDialog.Text.Text = $"Gegner gefunden: {opponentEP.Address}";
-                        await Task.Delay(1000);
-
-                        _udpClient.Close();
-                        searchingDialog.Close();
-                        await StartClient(opponentEP.Address.ToString(), GamePort);
-                        return;
-                    }
-                }
-
-                // No response → Become the host
-                isHost = true;
-                searchingDialog.Text.Text = "Kein Gegner gefunden. Warte auf einen Spieler...";
-                _udpClient.Close();
-                searchingDialog.Close();
-                await StartServer(GamePort);
+                TcpListener tcpListener = new TcpListener(IPAddress.Any, port);
+                tcpListener.Start();
+                tcpListener.Stop();
             }
-            catch (Exception ex)
+            catch (SocketException)
             {
-                MessageBox.Show(ex.Message);
+                isInUse = true;
+            }
+
+            return isInUse;
+        }
+
+        static async Task<bool> IsPortOpen(string ip, int port)
+        {
+            using (TcpClient client = new TcpClient())
+            {
+                try
+                {
+                    var connectTask = client.ConnectAsync(ip, port);
+                    if (await Task.WhenAny(connectTask, Task.Delay(500)) == connectTask)
+                    {
+                        return client.Connected;
+                    }
+                    return false;
+                }
+                catch
+                {
+                    return false;
+                }
             }
         }
 
-        private async Task RespondToDiscoveryRequests()
+        static string? GetLocalBaseIp()
         {
-#if DEBUG
-            using UdpClient listener = new UdpClient(new IPEndPoint(IPAddress.Loopback, DiscoveryPort));
-#else
-            using UdpClient listener = new UdpClient(DiscoveryPort);
-#endif
+            string? localIp = GetLocalIp();
+            if (string.IsNullOrEmpty(localIp)) return null;
+
+            string[] parts = localIp.Split('.');
+            return $"{parts[0]}.{parts[1]}.{parts[2]}";
+        }
+        static string? GetLocalIp()
+        {
+            try
+            {
+                using (Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0))
+                {
+                    socket.Connect("8.8.8.8", 80);
+                    return ((IPEndPoint?)socket.LocalEndPoint)?.Address.ToString();
+                }
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private async Task<string> FindIp(int port)
+        {
+            string? baseIp = GetLocalBaseIp();
+            if (baseIp == null)
+            {
+                return "127.0.0.1";
+            }
+
+            Console.WriteLine($"Scanning {baseIp}.X for devices with port {port} open...");
+
             while (true)
             {
-                UdpReceiveResult result = await listener.ReceiveAsync();
-                IPEndPoint senderEP = result.RemoteEndPoint;
-                string message = Encoding.UTF8.GetString(result.Buffer);
-
-                if (message == "FIND_OPPONENT")
+                for (int i = 1; i < 255; i++)
                 {
-                    byte[] response = "OPPONENT_FOUND"u8.ToArray();
-                    listener.Send(response, response.Length, senderEP);
+                    string ip = $"{baseIp}.{i}";
+                    bool isOpen = await IsPortOpen(ip, port);
+
+                    if (isOpen)
+                    {
+                       return ip;
+                    }
                 }
+            }
+        }
+
+        private async Task SearchOpponent()
+        {
+            isHost = !IsTcpPortInUse(GamePort);
+
+            if (isHost)
+            {
+                int timeout = 1000;
+                var task = FindIp(GamePort);
+                if (await Task.WhenAny(task, Task.Delay(timeout)) == task)
+                {
+                    await StartClient(await task, GamePort);
+                }
+                else await StartServer(GamePort);
+            }
+            else
+            {
+                var opponentIp = "127.0.0.1";
+                await StartClient(opponentIp, GamePort);
             }
         }
 
@@ -236,7 +260,7 @@ namespace Memory_InSchritten
             {
                 Text =
                 {
-                    Text = "Warte auf Verbindung..."
+                    Text = "Suche nach Gegner im lokalen Netzwerk..."
                 }
             };
             searchingDialog.Show();
@@ -325,6 +349,9 @@ namespace Memory_InSchritten
                 MessageBox.Show("Ungültiger Name", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
                 p1name = Interaction.InputBox("Spieler 1 Name", "Memory", "Player 1");
             }
+
+            Player1.PlayerName.Text = p1name;
+
             if (Online) await SearchOpponent();
             else
             {
@@ -336,8 +363,6 @@ namespace Memory_InSchritten
                 }
                 Player2.PlayerName.Text = p2name;
             }
-
-            Player1.PlayerName.Text = p1name;
         }
 
         private void SetCards()
@@ -358,7 +383,8 @@ namespace Memory_InSchritten
 
         private async Task Shuffle()
         {
-            if (!Online) {
+            if (!Online)
+            {
                 var rnd = new Random();
                 for (var i = 0; i < Cards.Count; i++)
                 {
@@ -372,7 +398,7 @@ namespace Memory_InSchritten
                 if (isHost)
                 {
                     List<string> clientCards = [];
-                    for (int i=0; i<20; i++)
+                    for (int i = 0; i < 20; i++)
                     {
                         clientCards.Add(await ReadString());
                     }

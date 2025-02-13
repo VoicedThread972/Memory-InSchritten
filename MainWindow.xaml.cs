@@ -2,6 +2,7 @@
 using Microsoft.VisualBasic;
 using System;
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -10,6 +11,7 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -180,50 +182,45 @@ namespace Memory_InSchritten
             }
         }
 
-        static string? GetLocalBaseIp()
+        static List<string> GetActiveDevices()
         {
-            string? localIp = GetLocalIp();
-            if (string.IsNullOrEmpty(localIp)) return null;
+            List<string> ipList = new List<string>();
+            Process process = new Process();
+            process.StartInfo.FileName = "arp";
+            process.StartInfo.Arguments = "-a";
+            process.StartInfo.RedirectStandardOutput = true;
+            process.StartInfo.UseShellExecute = false;
+            process.StartInfo.CreateNoWindow = true;
+            process.Start();
 
-            string[] parts = localIp.Split('.');
-            return $"{parts[0]}.{parts[1]}.{parts[2]}";
-        }
-        static string? GetLocalIp()
-        {
-            try
+            string output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+
+            MatchCollection matches = Regex.Matches(output, @"\d+\.\d+\.\d+\.\d+");
+            foreach (Match match in matches)
             {
-                using (Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0))
+                string ip = match.Value;
+                if (ip.StartsWith("10.10.")) // Only scan within 10.10.x.x
                 {
-                    socket.Connect("8.8.8.8", 80);
-                    return ((IPEndPoint?)socket.LocalEndPoint)?.Address.ToString();
+                    ipList.Add(ip);
                 }
             }
-            catch
-            {
-                return null;
-            }
+
+            return ipList;
         }
 
         private async Task<string> FindIp(int port)
         {
-            string? baseIp = GetLocalBaseIp();
-            if (baseIp == null)
-            {
-                return "127.0.0.1";
-            }
-
-            Console.WriteLine($"Scanning {baseIp}.X for devices with port {port} open...");
-
             while (true)
             {
-                for (int i = 1; i < 255; i++)
-                {
-                    string ip = $"{baseIp}.{i}";
-                    bool isOpen = await IsPortOpen(ip, port);
+                List<string> activeIps = GetActiveDevices();
 
+                foreach (string ip in activeIps)
+                {
+                    bool isOpen = await IsPortOpen(ip, port);
                     if (isOpen)
                     {
-                       return ip;
+                        return ip;
                     }
                 }
             }

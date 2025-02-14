@@ -56,17 +56,6 @@ namespace Memory_InSchritten
             InitializeComponent();
         }
 
-        private async Task Handshake()
-        {
-            await SendString("READY");
-            var msg = await ReadString();
-            if (!msg.Equals("READY"))
-            {
-                MessageBox.Show("Verbindung Fehlgeschlagen", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
-                throw new NotImplementedException();
-            }
-        }
-
         private async Task SendString(string data)
         {
             byte[] bytes = Encoding.UTF8.GetBytes(data);
@@ -95,14 +84,16 @@ namespace Memory_InSchritten
 
         private async Task<int> ReadInt()
         {
-            return BitConverter.ToInt32(await ReadBytes(sizeof(int)), 0);
+            byte[] dataBytes = await ReadBytes(sizeof(int));
+            //MessageBox.Show(BitConverter.ToInt32(dataBytes, 0).ToString());
+            return BitConverter.ToInt32(dataBytes, 0);
         }
 
         private async Task SendBytes(byte[] Object)
         {
             try
             {
-                NetworkStream stream = _client.GetStream();
+                NetworkStream stream = _client!.GetStream();
 
                 await stream.FlushAsync();
                 await stream.WriteAsync(Object, 0, Object.Length);
@@ -117,9 +108,10 @@ namespace Memory_InSchritten
 
         private async Task<byte[]> ReadBytes(int expectedSize)
         {
+            if (expectedSize is <=0 or >256) return [];
             try
             {
-                NetworkStream stream = _client.GetStream();
+                NetworkStream stream = _client!.GetStream();
                 byte[] buffer = new byte[expectedSize];
                 int totalRead = 0;
 
@@ -232,13 +224,23 @@ namespace Memory_InSchritten
 
             if (isHost)
             {
-                int timeout = 1000;
-                var task = FindIp(GamePort);
-                if (await Task.WhenAny(task, Task.Delay(timeout)) == task)
+                //int timeout = 1000;
+                //var task = FindIp(GamePort);
+                //if (await Task.WhenAny(task, Task.Delay(timeout)) == task)
+                //{
+                //    await StartClient(await task, GamePort);
+                //}
+                //else await StartServer(GamePort);
+                string ip = Interaction.InputBox("IP Addresse des Gegners", "Memory", "10.10.77.58");
+                if (Regex.IsMatch(ip, @"^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$"))
                 {
-                    await StartClient(await task, GamePort);
+                    isHost = false;
+                    await StartClient(ip, GamePort);
                 }
-                else await StartServer(GamePort);
+                else
+                {
+                    await StartServer(GamePort);
+                }
             }
             else
             {
@@ -247,6 +249,18 @@ namespace Memory_InSchritten
             }
         }
 
+        private async Task SendRowCol(int row, int column)
+        {
+            await SendInt(row);
+            await SendInt(column);
+        }
+
+        private async Task<(int,int)> ReadRowCol()
+        {
+            int row = await ReadInt();
+            int column = await ReadInt();
+            return (row, column);
+        }
 
         private async Task StartServer(int port)
         {
@@ -272,7 +286,6 @@ namespace Memory_InSchritten
 
             await DecideStart();
         }
-
 
         private async Task StartClient(string serverIp, int port)
         {
@@ -327,9 +340,8 @@ namespace Memory_InSchritten
         {
             if (player1turn) return;
 
-            await Handshake();
-            int row = await ReadInt();
-            int column = await ReadInt();
+            (var row, var column) = await ReadRowCol();
+
             _allowMove = true;
 
             Button btn = Grid.Children.OfType<Button>().FirstOrDefault(b => (int)b.GetValue(Grid.RowProperty) == row && (int)b.GetValue(Grid.ColumnProperty) == column)!;
@@ -340,25 +352,25 @@ namespace Memory_InSchritten
 
         private async Task SetNames()
         {
-            var p1name = Interaction.InputBox("Spieler 1 Name", "Memory", "Player 1");
-            while (p1name.Length is > 10 or 0)
+            var p1Name = Interaction.InputBox("Spieler 1 Name", "Memory", "Player 1");
+            while (p1Name.Length is > 10 or 0)
             {
                 MessageBox.Show("Ungültiger Name", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
-                p1name = Interaction.InputBox("Spieler 1 Name", "Memory", "Player 1");
+                p1Name = Interaction.InputBox("Spieler 1 Name", "Memory", "Player 1");
             }
 
-            Player1.PlayerName.Text = p1name;
+            Player1.PlayerName.Text = p1Name;
 
             if (Online) await SearchOpponent();
             else
             {
-                var p2name = Interaction.InputBox("Spieler 2 Name", "Memory", "Player 2");
-                while (p2name.Length is > 10 or 0)
+                var p2Name = Interaction.InputBox("Spieler 2 Name", "Memory", "Player 2");
+                while (p2Name.Length is > 10 or 0)
                 {
                     MessageBox.Show("Ungültiger Name", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
-                    p2name = Interaction.InputBox("Spieler 2 Name", "Memory", "Player 1");
+                    p2Name = Interaction.InputBox("Spieler 2 Name", "Memory", "Player 1");
                 }
-                Player2.PlayerName.Text = p2name;
+                Player2.PlayerName.Text = p2Name;
             }
         }
 
@@ -391,7 +403,6 @@ namespace Memory_InSchritten
             }
             else
             {
-                await Handshake();
                 if (isHost)
                 {
                     List<string> clientCards = [];
@@ -471,6 +482,7 @@ namespace Memory_InSchritten
         private async Task CoverCards()
         {
             MessageBox.Show("Die Karten werden gedeckt", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
+            
             foreach (var child in Grid.Children)
             {
                 if (child is Button btn && Open.Contains(btn.Content.ToString() ?? ""))
@@ -514,30 +526,32 @@ namespace Memory_InSchritten
             Button? btn = sender as Button;
             if (btn is null) return;
 
-            if (Online)
-            {
-                if (player1turn)
-                {
-                    int row = (int)btn.GetValue(Grid.RowProperty);
-                    int column = (int)btn.GetValue(Grid.ColumnProperty);
-
-                    await Handshake();
-                    await SendInt(row);
-                    await SendInt(column);
-                }
-                else if (!_allowMove) return;
-            }
+            if (!_allowMove && Online && !player1turn) return;
 
             _allowMove = false;
+            bool pair = false;
+            bool cover = false;
             Open.Add(btn.Content.ToString() ?? "");
             btn.Background = new ImageBrush(new BitmapImage(new Uri(btn.Content.ToString() ?? "")));
             btn.IsHitTestVisible = false;
             btn.Focusable = false;
+
             if (Open.Count >= 2)
             {
-                if (Open[0] == Open[1]) CardPair();
-                else await CoverCards();
+                if (Open[0] == Open[1]) pair = true;
+                else cover = true;
             }
+
+            if (Online && player1turn)
+            {
+                int row = (int)btn.GetValue(Grid.RowProperty);
+                int column = (int)btn.GetValue(Grid.ColumnProperty);
+
+                await SendRowCol(row, column);
+            }
+
+            if (pair) CardPair();
+            else if(cover) await CoverCards();
         }
 
         private void GetOnline()

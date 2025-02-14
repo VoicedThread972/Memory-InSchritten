@@ -224,28 +224,31 @@ namespace Memory_InSchritten
 
             if (isHost)
             {
-                //int timeout = 1000;
-                //var task = FindIp(GamePort);
-                //if (await Task.WhenAny(task, Task.Delay(timeout)) == task)
+                int timeout = 1000;
+                var task = FindIp(GamePort);
+                if (await Task.WhenAny(task, Task.Delay(timeout)) == task)
+                {
+                    await StartClient(await task, GamePort);
+                }
+                else await StartServer(GamePort);
+                //string ip = Interaction.InputBox("IP Addresse des Gegners", "Memory", "10.10.77.58");
+                //if (Regex.IsMatch(ip, @"^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$"))
                 //{
-                //    await StartClient(await task, GamePort);
+                //    isHost = false;
+                //    await StartClient(ip, GamePort);
                 //}
-                //else await StartServer(GamePort);
-                string ip = Interaction.InputBox("IP Addresse des Gegners", "Memory", "10.10.77.58");
-                if (Regex.IsMatch(ip, @"^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$"))
-                {
-                    isHost = false;
-                    await StartClient(ip, GamePort);
-                }
-                else
-                {
-                    await StartServer(GamePort);
-                }
+                //else
+                //{
+                //    await StartServer(GamePort);
+                //}
             }
             else
             {
                 var opponentIp = "127.0.0.1";
-                await StartClient(opponentIp, GamePort);
+                if (await IsPortOpen(opponentIp, GamePort))
+                {
+                    await StartClient(opponentIp, GamePort);
+                }
             }
         }
 
@@ -277,6 +280,8 @@ namespace Memory_InSchritten
             searchingDialog.Show();
 
             _client = await _listener.AcceptTcpClientAsync();
+            _client = await _listener.AcceptTcpClientAsync();
+
             searchingDialog.Text.Text = "Gegner verbunden!";
             await Task.Delay(1000);
             searchingDialog.Close();

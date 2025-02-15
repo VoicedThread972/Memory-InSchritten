@@ -34,19 +34,17 @@ namespace Memory_InSchritten
 
         private bool Online;
 
-        private bool isHost;
-
         private bool _allowMove;
 
         private bool player1turn = true;
 
         private List<string> Open = [];
 
+        private const string ServerIp = "127.0.0.1";
+
         private const int GamePort = 51322;
 
         private TcpClient? _client;
-
-        private TcpListener? _listener;
 
         private ImageBrush Covered = new(new BitmapImage(new Uri(Directory.GetCurrentDirectory() + @"\bilder\starsolid.gif")));
 
@@ -72,7 +70,6 @@ namespace Memory_InSchritten
                 return "";
 
             byte[] dataBytes = await ReadBytes(length);
-            //MessageBox.Show(Encoding.UTF8.GetString(dataBytes));
             return Encoding.UTF8.GetString(dataBytes);
         }
 
@@ -85,7 +82,6 @@ namespace Memory_InSchritten
         private async Task<int> ReadInt()
         {
             byte[] dataBytes = await ReadBytes(sizeof(int));
-            //MessageBox.Show(BitConverter.ToInt32(dataBytes, 0).ToString());
             return BitConverter.ToInt32(dataBytes, 0);
         }
 
@@ -136,139 +132,6 @@ namespace Memory_InSchritten
             }
         }
 
-        static bool IsTcpPortInUse(int port)
-        {
-            bool isInUse = false;
-
-            try
-            {
-                TcpListener tcpListener = new TcpListener(IPAddress.Any, port);
-                tcpListener.Start();
-                tcpListener.Stop();
-            }
-            catch (SocketException)
-            {
-                isInUse = true;
-            }
-
-            return isInUse;
-        }
-
-        static async Task<(string,bool)> IsPortOpen(string ip, int port)
-        {
-            using (TcpClient client = new TcpClient())
-            {
-                try
-                {
-                    var connectTask = client.ConnectAsync(ip, port);
-                    if (await Task.WhenAny(connectTask, Task.Delay(500)) == connectTask)
-                    {
-                        return (ip, client.Connected);
-                    }
-                    return (ip, false);
-                }
-                catch
-                {
-                    return (ip, false);
-                }
-            }
-        }
-
-        static List<string> GetActiveDevices()
-        {
-            List<string> ipList = new List<string>();
-            Process process = new Process();
-            process.StartInfo.FileName = "arp";
-            process.StartInfo.Arguments = "-a";
-            process.StartInfo.RedirectStandardOutput = true;
-            process.StartInfo.UseShellExecute = false;
-            process.StartInfo.CreateNoWindow = true;
-            process.Start();
-
-            string output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit();
-
-            MatchCollection matches = Regex.Matches(output, @"\d+\.\d+\.\d+\.\d+");
-            foreach (Match match in matches)
-            {
-                string ip = match.Value;
-                if (ip.StartsWith("10.10.")) // Only scan within 10.10.x.x
-                {
-                    ipList.Add(ip);
-                }
-            }
-
-            return ipList;
-        }
-
-        static async Task<string> WaitForSpecificResult(List<Task<(string,bool)>> tasks)
-        {
-            var taskList = new HashSet<Task<(string,bool)>>(tasks);
-
-            while (taskList.Count > 0)
-            {
-                var finishedTask = await Task.WhenAny(taskList);
-                taskList.Remove(finishedTask);
-
-                if ((await finishedTask).Item2)
-                {
-                    return finishedTask.Result.Item1;
-                }
-            }
-
-            await Task.Delay(1000);
-            return "127.0.0.1";
-        }
-
-        private async Task<string> FindIp(int port)
-        {
-            while (true)
-            {
-                List<string> activeIps = GetActiveDevices();
-                List<Task<(string, bool)>> tasks = [];
-
-                foreach (string ip in activeIps)
-                {
-                    tasks.Add(IsPortOpen(ip, port));
-                }
-                return await WaitForSpecificResult(tasks);
-            }
-        }
-
-        private async Task SearchOpponent()
-        {
-            isHost = !IsTcpPortInUse(GamePort);
-
-            if (isHost)
-            {
-                int timeout = 1000;
-                var task = FindIp(GamePort);
-                if (await Task.WhenAny(task, Task.Delay(timeout)) == task)
-                {
-                    await StartClient(await task, GamePort);
-                }
-                else await StartServer(GamePort);
-                //string ip = Interaction.InputBox("IP Addresse des Gegners", "Memory", "10.10.77.58");
-                //if (Regex.IsMatch(ip, @"^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$"))
-                //{
-                //    isHost = false;
-                //    await StartClient(ip, GamePort);
-                //}
-                //else
-                //{
-                //    await StartServer(GamePort);
-                //}
-            }
-            else
-            {
-                var opponentIp = "127.0.0.1";
-                if ((await IsPortOpen(opponentIp, GamePort)).Item2)
-                {
-                    await StartClient(opponentIp, GamePort);
-                }
-            }
-        }
-
         private async Task SendRowCol(int row, int column)
         {
             await SendInt(row);
@@ -282,33 +145,6 @@ namespace Memory_InSchritten
             return (row, column);
         }
 
-        private async Task StartServer(int port)
-        {
-            _listener = new TcpListener(IPAddress.Any, port);
-            _listener.Start();
-
-            var searchingDialog = new SearchingDialog
-            {
-                Text =
-                {
-                    Text = "Suche nach Gegner im lokalen Netzwerk..."
-                }
-            };
-            searchingDialog.Show();
-
-            _client = await _listener.AcceptTcpClientAsync();
-            _client = await _listener.AcceptTcpClientAsync();
-
-            searchingDialog.Text.Text = "Gegner verbunden!";
-            await Task.Delay(1000);
-            searchingDialog.Close();
-
-            await SendString(Player1.PlayerName.Text);
-            Player2.PlayerName.Text = await ReadString();
-
-            await DecideStart();
-        }
-
         private async Task StartClient(string serverIp, int port)
         {
             _client = new TcpClient();
@@ -318,7 +154,7 @@ namespace Memory_InSchritten
             {
                 Text =
                 {
-                    Text = "Verbindung zum Gegner hergestellt!"
+                    Text = "Verbindung zum Server hergestellt!"
                 }
             };
             searchingDialog.Show();
@@ -328,30 +164,32 @@ namespace Memory_InSchritten
             await SendString(Player1.PlayerName.Text);
             Player2.PlayerName.Text = await ReadString();
 
+            searchingDialog = new SearchingDialog
+            {
+                Text =
+                {
+                    Text = "Gegner gefunden!"
+                }
+            };
+            searchingDialog.Show();
+            await Task.Delay(1000);
+            searchingDialog.Close();
+
             await DecideStart();
         }
 
         private async Task DecideStart()
         {
-            Random rand = new Random();
+            player1turn = await ReadInt() == 0;
 
-            int myNumber = rand.Next(1, 100);
-            await SendInt(myNumber);
-
-            int opponentNumber = await ReadInt();
-
-
-            int sum = myNumber + opponentNumber;
-            if ((sum % 2 == 1) != isHost)
+            if (player1turn)
             {
-                player1turn = true;
                 Player1.Rect.Fill = Brushes.DeepSkyBlue;
                 Player2.Rect.Fill = Brushes.LightGray;
                 MessageBox.Show($"{Player1.PlayerName.Text} fängt an!");
             }
             else
             {
-                player1turn = false;
                 Player1.Rect.Fill = Brushes.LightGray;
                 Player2.Rect.Fill = Brushes.DeepSkyBlue;
                 MessageBox.Show($"{Player2.PlayerName.Text} fängt an!");
@@ -369,10 +207,17 @@ namespace Memory_InSchritten
             Button btn = Grid.Children.OfType<Button>().FirstOrDefault(b => (int)b.GetValue(Grid.RowProperty) == row && (int)b.GetValue(Grid.ColumnProperty) == column)!;
             ShowCard(btn, new RoutedEventArgs());
 
-            await WaitForOpponent();
+            try
+            {
+                await WaitForOpponent();
+            }
+            catch
+            {
+                Reset();
+            }
         }
 
-        private async Task SetNames()
+        private void SetName()
         {
             var p1Name = Interaction.InputBox("Spieler 1 Name", "Memory", "Player 1");
             while (p1Name.Length is > 10 or 0)
@@ -383,8 +228,7 @@ namespace Memory_InSchritten
 
             Player1.PlayerName.Text = p1Name;
 
-            if (Online) await SearchOpponent();
-            else
+            if (!Online)
             {
                 var p2Name = Interaction.InputBox("Spieler 2 Name", "Memory", "Player 2");
                 while (p2Name.Length is > 10 or 0)
@@ -425,39 +269,13 @@ namespace Memory_InSchritten
             }
             else
             {
-                if (isHost)
+                await SendInt(Cards.Count);
+                var cardCount = await ReadInt();
+                var rnd = new Random();
+                for (var i = 0; i < cardCount; i++)
                 {
-                    List<string> clientCards = [];
-                    for (int i = 0; i < 20; i++)
-                    {
-                        clientCards.Add(await ReadString());
-                    }
-
-                    var rnd = new Random();
-                    for (var i = 0; i < Cards.Count; i++)
-                    {
-                        var index = rnd.Next(Cards.Count);
-                        (Cards[i], Cards[index]) = (Cards[index], Cards[i]);
-                        (clientCards[i], clientCards[index]) = (clientCards[index], clientCards[i]);
-                    }
-
-                    foreach (var card in clientCards)
-                    {
-                        await SendString(card);
-                    }
-                }
-                else
-                {
-                    foreach (var card in Cards)
-                    {
-                        await SendString(card);
-                    }
-
-                    Cards = [];
-                    for (int i = 0; i < 20; i++)
-                    {
-                        Cards.Add(await ReadString());
-                    }
+                    var index = await ReadInt();
+                    (Cards[i], Cards[index]) = (Cards[index], Cards[i]);
                 }
             }
         }
@@ -585,7 +403,7 @@ namespace Memory_InSchritten
 
         private async void Reset()
         {
-            _listener?.Stop();
+            _client?.Close();
 
             player1turn = true;
             Player1.Rect.Fill = Brushes.DeepSkyBlue;
@@ -605,11 +423,13 @@ namespace Memory_InSchritten
 
             GetOnline();
 
-            await SetNames();
+            SetName();
 
             SetCards();
 
             LoadCards();
+
+            await StartClient(ServerIp, GamePort);
 
             await Shuffle();
 

@@ -42,7 +42,7 @@ namespace Memory_InSchritten
 
         private List<string> Open = [];
 
-        private const int GamePort = 5000;
+        private const int GamePort = 51322;
 
         private TcpClient? _client;
 
@@ -154,7 +154,7 @@ namespace Memory_InSchritten
             return isInUse;
         }
 
-        static async Task<bool> IsPortOpen(string ip, int port)
+        static async Task<(string,bool)> IsPortOpen(string ip, int port)
         {
             using (TcpClient client = new TcpClient())
             {
@@ -163,13 +163,13 @@ namespace Memory_InSchritten
                     var connectTask = client.ConnectAsync(ip, port);
                     if (await Task.WhenAny(connectTask, Task.Delay(500)) == connectTask)
                     {
-                        return client.Connected;
+                        return (ip, client.Connected);
                     }
-                    return false;
+                    return (ip, false);
                 }
                 catch
                 {
-                    return false;
+                    return (ip, false);
                 }
             }
         }
@@ -201,20 +201,37 @@ namespace Memory_InSchritten
             return ipList;
         }
 
+        static async Task<string> WaitForSpecificResult(List<Task<(string,bool)>> tasks)
+        {
+            var taskList = new HashSet<Task<(string,bool)>>(tasks);
+
+            while (taskList.Count > 0)
+            {
+                var finishedTask = await Task.WhenAny(taskList);
+                taskList.Remove(finishedTask);
+
+                if ((await finishedTask).Item2)
+                {
+                    return finishedTask.Result.Item1;
+                }
+            }
+
+            await Task.Delay(1000);
+            return "127.0.0.1";
+        }
+
         private async Task<string> FindIp(int port)
         {
             while (true)
             {
                 List<string> activeIps = GetActiveDevices();
+                List<Task<(string, bool)>> tasks = [];
 
                 foreach (string ip in activeIps)
                 {
-                    bool isOpen = await IsPortOpen(ip, port);
-                    if (isOpen)
-                    {
-                        return ip;
-                    }
+                    tasks.Add(IsPortOpen(ip, port));
                 }
+                return await WaitForSpecificResult(tasks);
             }
         }
 
@@ -245,7 +262,7 @@ namespace Memory_InSchritten
             else
             {
                 var opponentIp = "127.0.0.1";
-                if (await IsPortOpen(opponentIp, GamePort))
+                if ((await IsPortOpen(opponentIp, GamePort)).Item2)
                 {
                     await StartClient(opponentIp, GamePort);
                 }

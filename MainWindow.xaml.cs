@@ -46,7 +46,7 @@ namespace Memory_InSchritten
 
         private TcpClient? _client;
 
-        private ImageBrush Covered = new(new BitmapImage(new Uri(Directory.GetCurrentDirectory() + @"\bilder\starsolid.gif")));
+        private readonly ImageBrush Covered = new(new BitmapImage(new Uri(Directory.GetCurrentDirectory() + @"\bilder\starsolid.gif")));
 
         private List<string> Cards = [];
         public MainWindow()
@@ -92,7 +92,7 @@ namespace Memory_InSchritten
                 NetworkStream stream = _client!.GetStream();
 
                 await stream.FlushAsync();
-                await stream.WriteAsync(Object, 0, Object.Length);
+                await stream.WriteAsync(Object);
                 await stream.FlushAsync();
             }
             catch
@@ -113,7 +113,7 @@ namespace Memory_InSchritten
 
                 while (totalRead < expectedSize)
                 {
-                    int bytesRead = await stream.ReadAsync(buffer, totalRead, expectedSize - totalRead);
+                    int bytesRead = await stream.ReadAsync(buffer.AsMemory(totalRead, expectedSize - totalRead));
                     if (bytesRead == 0)
                     {
                         MessageBox.Show("Verbindung verloren!", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -256,11 +256,10 @@ namespace Memory_InSchritten
             else cardPath += "markus";
         }
 
-        private async Task Shuffle()
+        private async Task Shuffle(Random rnd)
         {
             if (!Online)
             {
-                var rnd = new Random();
                 for (var i = 0; i < Cards.Count; i++)
                 {
                     var index = rnd.Next(Cards.Count);
@@ -271,7 +270,6 @@ namespace Memory_InSchritten
             {
                 await SendInt(Cards.Count);
                 var cardCount = await ReadInt();
-                var rnd = new Random();
                 for (var i = 0; i < cardCount; i++)
                 {
                     var index = await ReadInt();
@@ -363,8 +361,7 @@ namespace Memory_InSchritten
 
         private async void ShowCard(object sender, RoutedEventArgs e)
         {
-            Button? btn = sender as Button;
-            if (btn is null) return;
+            if (sender is not Button btn) return;
 
             if (!_allowMove && Online && !player1turn) return;
 
@@ -431,7 +428,7 @@ namespace Memory_InSchritten
 
             await StartClient(ServerIp, GamePort);
 
-            await Shuffle();
+            await Shuffle(new Random());
 
             PlaceCards();
 

@@ -95,12 +95,7 @@ namespace Memory_InSchritten
                 await stream.WriteAsync(Object);
                 await stream.FlushAsync();
             }
-            catch (Exception e)
-            {
-                MessageBox.Show(e.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
-                Online = false;
-                throw new Exception("Connection lost");
-            }
+            catch { throw; }
         }
 
         private async Task<byte[]> ReadBytes(int expectedSize)
@@ -117,20 +112,13 @@ namespace Memory_InSchritten
                     int bytesRead = await stream.ReadAsync(buffer.AsMemory(totalRead, expectedSize - totalRead));
                     if (bytesRead == 0)
                     {
-                        MessageBox.Show("Verbindung beim Lesen verloren!", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
-                        Online = false;
                         throw new Exception("Connection lost");
                     }
                     totalRead += bytesRead;
                 }
                 return buffer;
             }
-            catch (Exception e)
-            {
-                MessageBox.Show(e.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
-                Online = false;
-                throw new Exception("Connection lost");
-            }
+            catch { throw; }
         }
 
         private async Task SendRowCol(int row, int column)
@@ -160,8 +148,8 @@ namespace Memory_InSchritten
             }
             catch (Exception e)
             {
-                MessageBox.Show(e.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
                 Online = false;
+                MessageBox.Show(e.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -443,7 +431,15 @@ namespace Memory_InSchritten
                 int row = (int)btn.GetValue(Grid.RowProperty);
                 int column = (int)btn.GetValue(Grid.ColumnProperty);
 
-                await SendRowCol(row, column);
+                try
+                {
+                    await SendRowCol(row, column);
+                }
+                catch (Exception ex)
+                {
+                    Online = false;
+                    MessageBox.Show(ex.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
 
             if (pair) CardPair();

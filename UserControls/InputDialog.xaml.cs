@@ -58,5 +58,13 @@ namespace Memory_InSchritten.UserControls
         {
             Dispose();
         }
+
+        private void Window_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                Ok_Click(sender, e);
+            }
+        }
     }
 }

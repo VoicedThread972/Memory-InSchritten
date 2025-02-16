@@ -37,9 +37,13 @@ namespace Memory_InSchritten
 
         private bool _allowMove;
 
+        private int cardCount;
+
         private bool player1turn = true;
 
         private List<string> Open = [];
+
+        private List<(int,int)> Moves = [];
 
         private const string ServerIp = "192.168.178.34";
 
@@ -135,6 +139,41 @@ namespace Memory_InSchritten
             return (row, column);
         }
 
+        private async Task HandleRequests()
+        {
+            switch (await ReadString())
+            {
+                case "name":
+                    await SendString("ACK");
+                    await SetName();
+                    await SendString("OK");
+                    break;
+                case "turn":
+                    await SendString("ACK");
+                    await Turn();
+                    await SendString("OK");
+                    break;
+                case "count":
+                    await SendString("ACK");
+                    await SetCardCount();
+                    await SendString("OK");
+                    break;
+                case "shuffle":
+                    await SendString("ACK");
+                    await Shuffle();
+                    await SendString("OK");
+                    break;
+                case "move":
+                    await SendString("ACK");
+                    await Move();
+                    await SendString("OK");
+                    break;
+                default:
+                    await SendString("FAIL");
+                    break;
+            }
+        }
+
         private async Task StartClient(string serverIp, int port)
         {
             if (!Online) return;
@@ -145,6 +184,11 @@ namespace Memory_InSchritten
                 await _client.ConnectAsync(serverIp, port);
 
                 ShowDialog("Verbindung zum Server hergestellt!");
+
+                while (true)
+                {
+                    await HandleRequests();
+                }
             }
             catch (Exception e)
             {
@@ -153,7 +197,7 @@ namespace Memory_InSchritten
             }
         }
 
-        private async Task DecideStart()
+        private async Task Turn()
         {
             if (Online)
             {
@@ -186,20 +230,30 @@ namespace Memory_InSchritten
             }
         }
 
-        private async Task WaitForOpponent()
+        private async Task Move()
         {
-            if (player1turn || !Online) return;
-
+            if (!Online) return;
             try
             {
-                (var row, var column) = await ReadRowCol();
+                if (!player1turn)
+                {
+                    (var row, var column) = await ReadRowCol();
 
-                _allowMove = true;
+                    _allowMove = true;
 
-                Button btn = Grid.Children.OfType<Button>().FirstOrDefault(b => (int)b.GetValue(Grid.RowProperty) == row && (int)b.GetValue(Grid.ColumnProperty) == column)!;
-                ShowCard(btn, new RoutedEventArgs());
-
-                await WaitForOpponent();
+                    Button btn = Grid.Children.OfType<Button>().FirstOrDefault(b => (int)b.GetValue(Grid.RowProperty) == row && (int)b.GetValue(Grid.ColumnProperty) == column)!;
+                    ShowCard(btn, new RoutedEventArgs());
+                }
+                else
+                {
+                    while (Moves.Count == 0)
+                    {
+                        await Task.Delay(500);
+                    }
+                    await SendInt(Moves.First().Item1);
+                    await SendInt(Moves.First().Item2);
+                    Moves.RemoveAt(0);
+                }
             }
             catch (Exception e)
             {
@@ -277,6 +331,10 @@ namespace Memory_InSchritten
                 }
                 Player2.PlayerName.Text = p2Name;
             }
+
+            SetCards();
+
+            LoadCards();
         }
 
         private void SetCards()
@@ -295,14 +353,18 @@ namespace Memory_InSchritten
             else cardPath += "markus";
         }
 
+        private async Task SetCardCount()
+        {
+            await SendInt(Cards.Count);
+        }
+
         private async Task Shuffle()
         {
             if (Online)
             {
                 try
                 {
-                    await SendInt(Cards.Count);
-                    var cardCount = await ReadInt();
+                    cardCount = await ReadInt();
                     for (var i = 0; i < cardCount; i++)
                     {
                         var index = await ReadInt();
@@ -323,6 +385,8 @@ namespace Memory_InSchritten
                     (Cards[i], Cards[index]) = (Cards[index], Cards[i]);
                 }
             }
+
+            PlaceCards();
         }
 
         private void LoadCards()
@@ -364,9 +428,9 @@ namespace Memory_InSchritten
             }
         }
 
-        private async Task CoverCards()
+        private void CoverCards(bool silent = false)
         {
-            MessageBox.Show("Die Karten werden gedeckt", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
+            if (!silent) MessageBox.Show("Die Karten werden gedeckt", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
             
             foreach (var child in Grid.Children)
             {
@@ -382,14 +446,12 @@ namespace Memory_InSchritten
             Player2.Rect.Fill = player1turn ? Brushes.LightGray : Brushes.DeepSkyBlue;
 
             Open = [];
-
-            if (!player1turn) await WaitForOpponent();
         }
 
-        private void CardPair()
+        private void CardPair(bool silent = false)
         {
             Open = [];
-            MessageBox.Show("Paar gefunden", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
+            if (!silent) MessageBox.Show("Paar gefunden", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
 
             if (int.TryParse(Player1.Score.Content.ToString() ?? "", out var score1) && int.TryParse(Player2.Score.Content.ToString() ?? "", out var score2))
             {
@@ -397,7 +459,7 @@ namespace Memory_InSchritten
                 {
                     Player1.Score.Content = score1;
                     Player2.Score.Content = score2;
-                    MessageBox.Show($"Spiel beendet!{Environment.NewLine}{(score1 > score2 ? Player1.PlayerName.Text : score1 < score2 ? Player2.PlayerName.Text : "Niemand")} gewinnt", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show($"Spiel beendet!{Environment.NewLine}{(score1 > score2 ? Player1.PlayerName.Text : score1 < score2 ? Player2.PlayerName.Text : "Niemand")} gewinnt", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
                     Reset();
                     return;
                 }
@@ -406,7 +468,7 @@ namespace Memory_InSchritten
             }
         }
 
-        private async void ShowCard(object sender, RoutedEventArgs e)
+        private void ShowCard(object sender, RoutedEventArgs e)
         {
             if (sender is not Button btn) return;
 
@@ -433,7 +495,7 @@ namespace Memory_InSchritten
 
                 try
                 {
-                    await SendRowCol(row, column);
+                    Moves.Add((row, column));
                 }
                 catch (Exception ex)
                 {
@@ -443,7 +505,7 @@ namespace Memory_InSchritten
             }
 
             if (pair) CardPair();
-            else if(cover) await CoverCards();
+            else if(cover) CoverCards();
         }
 
         private void GetOnline()
@@ -474,21 +536,19 @@ namespace Memory_InSchritten
 
             GetOnline();
 
-            await StartClient(ServerIp, GamePort);
+            if (Online) await StartClient(ServerIp, GamePort);
+            else
+            {
+                await SetName();
 
-            await SetName();
+                await Turn();
 
-            SetCards();
+                await SetCardCount();
 
-            LoadCards();
+                await Shuffle();
 
-            await DecideStart();
-
-            await Shuffle();
-
-            PlaceCards();
-
-            await WaitForOpponent();
+                await Move();
+            }
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)

@@ -5,6 +5,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Net;
 using System.Net.Mail;
 using System.Net.NetworkInformation;
@@ -64,12 +65,11 @@ namespace Memory_InSchritten
 
         private async Task<string> ReadString()
         {
-            int length = await ReadInt();
+            var length = await ReadInt();
 
-            if (length <= 0)
-                return "";
+            if (length is <= 0) return "";
 
-            byte[] dataBytes = await ReadBytes(length);
+            byte[] dataBytes = await ReadBytes((int)length);
             return Encoding.UTF8.GetString(dataBytes);
         }
 
@@ -95,10 +95,11 @@ namespace Memory_InSchritten
                 await stream.WriteAsync(Object);
                 await stream.FlushAsync();
             }
-            catch
+            catch (Exception e)
             {
-                MessageBox.Show("Die Verbindung wurde getrennt!", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
-                Reset();
+                MessageBox.Show(e.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
+                Online = false;
+                throw new Exception("Connection lost");
             }
         }
 
@@ -116,19 +117,19 @@ namespace Memory_InSchritten
                     int bytesRead = await stream.ReadAsync(buffer.AsMemory(totalRead, expectedSize - totalRead));
                     if (bytesRead == 0)
                     {
-                        MessageBox.Show("Verbindung verloren!", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
-                        Reset();
-                        return [];
+                        MessageBox.Show("Verbindung beim Lesen verloren!", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
+                        Online = false;
+                        throw new Exception("Connection lost");
                     }
                     totalRead += bytesRead;
                 }
                 return buffer;
             }
-            catch
+            catch (Exception e)
             {
-                MessageBox.Show("Die Verbindung wurde getrennt!", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
-                Reset();
-                return [];
+                MessageBox.Show(e.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
+                Online = false;
+                throw new Exception("Connection lost");
             }
         }
 
@@ -140,8 +141,9 @@ namespace Memory_InSchritten
 
         private async Task<(int,int)> ReadRowCol()
         {
-            int row = await ReadInt();
-            int column = await ReadInt();
+            var row = await ReadInt();
+            var column = await ReadInt();
+            
             return (row, column);
         }
 
@@ -156,9 +158,9 @@ namespace Memory_InSchritten
 
                 ShowDialog("Verbindung zum Server hergestellt!");
             }
-            catch
+            catch (Exception e)
             {
-                MessageBox.Show("Verbindung zum Server fehlgeschlagen!", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(e.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
                 Online = false;
             }
         }
@@ -167,9 +169,17 @@ namespace Memory_InSchritten
         {
             if (Online)
             {
-                player1turn = await ReadInt() == 0;
+                try
+                {
+                    player1turn = await ReadInt() == 0;
+                }
+                catch (Exception e)
+                {
+                    MessageBox.Show(e.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
+                    Online = false;
+                }
             }
-            else
+            if (!Online)
             {
                 player1turn = new Random().Next(1) == 0;
             }
@@ -192,21 +202,24 @@ namespace Memory_InSchritten
         {
             if (player1turn || !Online) return;
 
-            (var row, var column) = await ReadRowCol();
-
-            _allowMove = true;
-
-            Button btn = Grid.Children.OfType<Button>().FirstOrDefault(b => (int)b.GetValue(Grid.RowProperty) == row && (int)b.GetValue(Grid.ColumnProperty) == column)!;
-            ShowCard(btn, new RoutedEventArgs());
-
             try
             {
+                (var row, var column) = await ReadRowCol();
+
+                _allowMove = true;
+
+                Button btn = Grid.Children.OfType<Button>().FirstOrDefault(b => (int)b.GetValue(Grid.RowProperty) == row && (int)b.GetValue(Grid.ColumnProperty) == column)!;
+                ShowCard(btn, new RoutedEventArgs());
+
                 await WaitForOpponent();
             }
-            catch
+            catch (Exception e)
             {
-                Reset();
+                MessageBox.Show(e.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
+                Online = false;
+                return;
             }
+
         }
 
         private static async Task<string> ShowInputDialog(string def, string text)
@@ -252,6 +265,20 @@ namespace Memory_InSchritten
 
             Player1.PlayerName.Text = p1Name;
 
+            if (Online)
+            {
+                try
+                {
+                    await SendString(Player1.PlayerName.Text);
+                    Player2.PlayerName.Text = await ReadString();
+                    ShowDialog("Gegner gefunden!");
+                }
+                catch (Exception e)
+                {
+                    MessageBox.Show(e.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
+                    Online = false;
+                }
+            }
             if (!Online)
             {
                 var p2Name = await ShowInputDialog("Player 2", "Spieler 2 Name");
@@ -261,12 +288,6 @@ namespace Memory_InSchritten
                     p2Name = await ShowInputDialog("Player 2", "Spieler 2 Name");
                 }
                 Player2.PlayerName.Text = p2Name;
-            }
-            else
-            {
-                await SendString(Player1.PlayerName.Text);
-                Player2.PlayerName.Text = await ReadString();
-                ShowDialog("Gegner gefunden!");
             }
         }
 
@@ -288,21 +309,29 @@ namespace Memory_InSchritten
 
         private async Task Shuffle()
         {
+            if (Online)
+            {
+                try
+                {
+                    await SendInt(Cards.Count);
+                    var cardCount = await ReadInt();
+                    for (var i = 0; i < cardCount; i++)
+                    {
+                        var index = await ReadInt();
+                        (Cards[i], Cards[index]) = (Cards[index], Cards[i]);
+                    }
+                }
+                catch (Exception e)
+                {
+                    MessageBox.Show(e.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
+                    Online = false;
+                }
+            }
             if (!Online)
             {
                 for (var i = 0; i < Cards.Count; i++)
                 {
                     var index = new Random().Next(Cards.Count);
-                    (Cards[i], Cards[index]) = (Cards[index], Cards[i]);
-                }
-            }
-            else
-            {
-                await SendInt(Cards.Count);
-                var cardCount = await ReadInt();
-                for (var i = 0; i < cardCount; i++)
-                {
-                    var index = await ReadInt();
                     (Cards[i], Cards[index]) = (Cards[index], Cards[i]);
                 }
             }
@@ -380,7 +409,7 @@ namespace Memory_InSchritten
                 {
                     Player1.Score.Content = score1;
                     Player2.Score.Content = score2;
-                    MessageBox.Show($"Spiel beendet!{Environment.NewLine}{(score1 > score2 ? Player1.PlayerName.Text : score1 < score2 ? Player2.PlayerName.Text : "Niemand")} gewinnt");
+                    MessageBox.Show($"Spiel beendet!{Environment.NewLine}{(score1 > score2 ? Player1.PlayerName.Text : score1 < score2 ? Player2.PlayerName.Text : "Niemand")} gewinnt", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
                     Reset();
                     return;
                 }
@@ -451,11 +480,11 @@ namespace Memory_InSchritten
 
             await StartClient(ServerIp, GamePort);
 
+            await SetName();
+
             SetCards();
 
             LoadCards();
-
-            await SetName();
 
             await DecideStart();
 

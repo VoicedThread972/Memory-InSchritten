@@ -40,7 +40,7 @@ namespace Memory_InSchritten
 
         private List<string> Open = [];
 
-        private const string ServerIp = "127.0.0.1";
+        private const string ServerIp = "192.168.178.34";
 
         private const int GamePort = 51322;
 
@@ -147,58 +147,50 @@ namespace Memory_InSchritten
 
         private async Task StartClient(string serverIp, int port)
         {
-            _client = new TcpClient();
-            await _client.ConnectAsync(serverIp, port);
+            if (!Online) return;
 
-            var searchingDialog = new SearchingDialog
+            try
             {
-                Text =
-                {
-                    Text = "Verbindung zum Server hergestellt!"
-                }
-            };
-            searchingDialog.Show();
-            await Task.Delay(1000);
-            searchingDialog.Close();
+                _client = new TcpClient();
+                await _client.ConnectAsync(serverIp, port);
 
-            await SendString(Player1.PlayerName.Text);
-            Player2.PlayerName.Text = await ReadString();
-
-            searchingDialog = new SearchingDialog
+                ShowDialog("Verbindung zum Server hergestellt!");
+            }
+            catch
             {
-                Text =
-                {
-                    Text = "Gegner gefunden!"
-                }
-            };
-            searchingDialog.Show();
-            await Task.Delay(1000);
-            searchingDialog.Close();
-
-            await DecideStart();
+                MessageBox.Show("Verbindung zum Server fehlgeschlagen!", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
+                Online = false;
+            }
         }
 
         private async Task DecideStart()
         {
-            player1turn = await ReadInt() == 0;
+            if (Online)
+            {
+                player1turn = await ReadInt() == 0;
+            }
+            else
+            {
+                player1turn = new Random().Next(1) == 0;
+            }
 
             if (player1turn)
             {
                 Player1.Rect.Fill = Brushes.DeepSkyBlue;
                 Player2.Rect.Fill = Brushes.LightGray;
-                MessageBox.Show($"{Player1.PlayerName.Text} fängt an!");
+                ShowDialog($"{Player1.PlayerName.Text} fängt an!");
             }
             else
             {
                 Player1.Rect.Fill = Brushes.LightGray;
                 Player2.Rect.Fill = Brushes.DeepSkyBlue;
-                MessageBox.Show($"{Player2.PlayerName.Text} fängt an!");
+                ShowDialog($"{Player2.PlayerName.Text} fängt an!");
             }
         }
 
         private async Task WaitForOpponent()
         {
-            if (player1turn) return;
+            if (player1turn || !Online) return;
 
             (var row, var column) = await ReadRowCol();
 
@@ -217,26 +209,64 @@ namespace Memory_InSchritten
             }
         }
 
-        private void SetName()
+        private static async Task<string> ShowInputDialog(string def, string text)
         {
-            var p1Name = Interaction.InputBox("Spieler 1 Name", "Memory", "Player 1");
+            var msg = new InputDialog
+            {
+                Default = def,
+                Text = text
+            };
+            msg.Show();
+            while (msg.IsAlive)
+            {
+                await Task.Delay(500);
+            }
+            msg.Close();
+            msg.Dispose();
+            return msg.InputText ?? "";
+        }
+
+        private async static void ShowDialog(string text)
+        {
+            var msg = new Dialog
+            {
+                Text =
+                {
+                    Text = text
+                }
+            };
+            msg.Show();
+            await Task.Delay(1000);
+            msg.Close();
+            msg.Dispose();
+        }
+
+        private async Task SetName()
+        {
+            var p1Name = await ShowInputDialog("Player 1", "Spieler 1 Name");
             while (p1Name.Length is > 10 or 0)
             {
-                MessageBox.Show("Ungültiger Name", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
-                p1Name = Interaction.InputBox("Spieler 1 Name", "Memory", "Player 1");
+                ShowDialog("Ungültiger Name");
+                p1Name = await ShowInputDialog("Player 1", "Spieler 1 Name");
             }
 
             Player1.PlayerName.Text = p1Name;
 
             if (!Online)
             {
-                var p2Name = Interaction.InputBox("Spieler 2 Name", "Memory", "Player 2");
+                var p2Name = await ShowInputDialog("Player 2", "Spieler 2 Name");
                 while (p2Name.Length is > 10 or 0)
                 {
-                    MessageBox.Show("Ungültiger Name", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
-                    p2Name = Interaction.InputBox("Spieler 2 Name", "Memory", "Player 1");
+                    ShowDialog("Ungültiger Name");
+                    p2Name = await ShowInputDialog("Player 2", "Spieler 2 Name");
                 }
                 Player2.PlayerName.Text = p2Name;
+            }
+            else
+            {
+                await SendString(Player1.PlayerName.Text);
+                Player2.PlayerName.Text = await ReadString();
+                ShowDialog("Gegner gefunden!");
             }
         }
 
@@ -256,13 +286,13 @@ namespace Memory_InSchritten
             else cardPath += "markus";
         }
 
-        private async Task Shuffle(Random rnd)
+        private async Task Shuffle()
         {
             if (!Online)
             {
                 for (var i = 0; i < Cards.Count; i++)
                 {
-                    var index = rnd.Next(Cards.Count);
+                    var index = new Random().Next(Cards.Count);
                     (Cards[i], Cards[index]) = (Cards[index], Cards[i]);
                 }
             }
@@ -395,7 +425,6 @@ namespace Memory_InSchritten
         {
             var msg = MessageBox.Show("Möchten Sie online spielen?", "Memory", MessageBoxButton.YesNo, MessageBoxImage.Question);
             Online = msg == MessageBoxResult.Yes;
-            if (!Online) throw new NotImplementedException();
         }
 
         private async void Reset()
@@ -420,15 +449,17 @@ namespace Memory_InSchritten
 
             GetOnline();
 
-            SetName();
+            await StartClient(ServerIp, GamePort);
 
             SetCards();
 
             LoadCards();
 
-            await StartClient(ServerIp, GamePort);
+            await SetName();
 
-            await Shuffle(new Random());
+            await DecideStart();
+
+            await Shuffle();
 
             PlaceCards();
 

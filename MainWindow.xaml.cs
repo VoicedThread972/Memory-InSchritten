@@ -41,7 +41,7 @@ namespace Memory_InSchritten
 
         private int cardCount;
 
-        private string _Id;
+        private readonly string _Id;
 
         private bool player1turn = true;
 
@@ -49,7 +49,8 @@ namespace Memory_InSchritten
 
         private readonly List<(int,int)> Moves = [];
 
-        private const string ServerIp = "10.10.79.182";
+        //private const string ServerIp = "10.10.79.182";
+        private const string ServerIp = "192.168.178.34";
 
         private const int GamePort = 51322;
 
@@ -155,26 +156,35 @@ namespace Memory_InSchritten
 
         private async Task HandleRequests()
         {
-            switch (await ReadString())
+            try
             {
-                case "readcard":
-                    await SendString("ACK");
-                    await ReadCard();
-                    await SendString("OK");
-                    break;
-                case "sendcard":
-                    await SendString("ACK");
-                    await SendCard();
-                    await SendString("OK");
-                    break;
-                case "resync":
-                    await SendString("ACK");
-                    await Resync();
-                    await SendString("OK");
-                    break;
-                default:
-                    await SendString("FAIL");
-                    break;
+                var command = await ReadString();
+                switch (command)
+                {
+                    case "Read":
+                        await SendString("ACK");
+                        await ReadCard();
+                        await SendString("OK");
+                        break;
+                    case "Send":
+                        await SendString("ACK");
+                        await SendCard();
+                        await SendString("OK");
+                        break;
+                    case "Sync":
+                        await SendString("ACK");
+                        await Resync();
+                        await SendString("OK");
+                        break;
+                    default:
+                        await SendString("FAIL");
+                        break;
+                }
+            }
+            catch (Exception e)
+            {
+                MessageBox.Show(e.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
+                Online = false;
             }
         }
 

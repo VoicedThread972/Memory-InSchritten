@@ -47,7 +47,7 @@ namespace Memory_InSchritten
 
         private List<string> Open = [];
 
-        private List<(int,int)> Moves = [];
+        private readonly List<(int,int)> Moves = [];
 
         private const string ServerIp = "10.10.79.182";
 
@@ -147,26 +147,6 @@ namespace Memory_InSchritten
         {
             switch (await ReadString())
             {
-                case "name":
-                    await SendString("ACK");
-                    await SetName();
-                    await SendString("OK");
-                    break;
-                case "turn":
-                    await SendString("ACK");
-                    await Turn();
-                    await SendString("OK");
-                    break;
-                case "count":
-                    await SendString("ACK");
-                    await SetCardCount();
-                    await SendString("OK");
-                    break;
-                case "shuffle":
-                    await SendString("ACK");
-                    await Shuffle();
-                    await SendString("OK");
-                    break;
                 case "readcard":
                     await SendString("ACK");
                     await ReadCard();
@@ -194,7 +174,11 @@ namespace Memory_InSchritten
             var nameSet = !string.IsNullOrEmpty(Player1.PlayerName.Text);
             await SetName(nameSet);
 
+            await SetCards();
+
             await Turn();
+
+            await SetCardCount();
 
             await Shuffle();
 
@@ -397,26 +381,39 @@ namespace Memory_InSchritten
                 }
                 Player2.PlayerName.Text = p2Name;
             }
-
-            SetCards();
-
-            LoadCards();
         }
 
-        private void SetCards()
+        private async Task SetCards()
         {
-            var msg = new CustomMessageBox();
-            if (msg.ShowDialog() == true)
+            int choice;
+            if (!Online || (choice = await ReadInt()) == -1)
             {
-                cardPath += msg.Result switch
+                var msg = new CustomMessageBox();
+                if (msg.ShowDialog() == true)
                 {
-                    "Comics" => "comics",
-                    "Harry Potter" => "harrypotter",
-                    "Popstars" => "popstars",
-                    _ => "markus"
-                };
+                    cardPath += msg.Result switch
+                    {
+                        0 => "comics",
+                        1 => "harrypotter",
+                        2 => "popstars",
+                        _ => "markus"
+                    };
+                }
+                else cardPath += "markus";
+                if (Online) await SendInt(msg.Result);
             }
-            else cardPath += "markus";
+            else
+            {
+                cardPath += choice switch
+                {
+                    0 => "comics",
+                    1 => "harrypotter",
+                    2 => "popstars",
+                    _ => "markus",
+                };
+                await SendInt(choice);
+            }
+            LoadCards();
         }
 
         private async Task SetCardCount()
@@ -501,15 +498,13 @@ namespace Memory_InSchritten
             player1turn = !player1turn;
             Player1.Rect.Fill = player1turn ? Brushes.DeepSkyBlue : Brushes.LightGray;
             Player2.Rect.Fill = player1turn ? Brushes.LightGray : Brushes.DeepSkyBlue;
-            
+
             foreach (var child in Grid.Children)
             {
-                if (child is Button btn && Open.Contains(btn.Content.ToString() ?? ""))
-                {
-                    btn.Background = Covered;
-                    btn.IsHitTestVisible = true;
-                    btn.Focusable = true;
-                }
+                if (child is not Button btn || !Open.Contains(btn.Content.ToString() ?? "")) continue;
+                btn.Background = Covered;
+                btn.IsHitTestVisible = true;
+                btn.Focusable = true;
             }
 
             Open = [];
@@ -555,7 +550,7 @@ namespace Memory_InSchritten
                 else cover = true;
             }
 
-            if (Online && player1turn)
+            if (Online && player1turn && !silent)
             {
                 int row = (int)btn.GetValue(Grid.RowProperty);
                 int column = (int)btn.GetValue(Grid.ColumnProperty);

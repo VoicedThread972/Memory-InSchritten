@@ -19,29 +19,29 @@ namespace Memory_InSchritten.UserControls
     /// </summary>
     public partial class CustomMessageBox : Window
     {
-        public string Result { get; private set; }
+        public int Result { get; private set; }
         public CustomMessageBox()
         {
             InitializeComponent();
-            Result = "";
+            Result = 3;
         }
 
         private void Comics(object sender, RoutedEventArgs e)
         {
             this.DialogResult = true;
-            Result = "Comics";
+            Result = 0;
         }
 
         private void Harry_Potter(object sender, RoutedEventArgs e)
         {
             this.DialogResult = true;
-            Result = "Harry Potter";
+            Result = 1;
         }
 
         private void Popstars(object sender, RoutedEventArgs e)
         {
             this.DialogResult = true;
-            Result = "Popstars";
+            Result = 2;
         }
     }
 }

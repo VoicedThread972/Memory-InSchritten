@@ -221,8 +221,8 @@ namespace Memory_InSchritten
             }
             catch (Exception e)
             {
-                MessageBox.Show(e.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
                 Online = false;
+                MessageBox.Show(e.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -240,8 +240,8 @@ namespace Memory_InSchritten
             }
             catch (Exception e)
             {
-                MessageBox.Show(e.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
                 Online = false;
+                MessageBox.Show(e.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -257,10 +257,12 @@ namespace Memory_InSchritten
 
                 ShowDialog("Verbindung zum Server hergestellt!");
 
-                while (true)
+                while (Online)
                 {
                     await HandleRequests();
                 }
+
+                throw new Exception("Verbindung zum Server verloren");
             }
             catch (Exception e)
             {

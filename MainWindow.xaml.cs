@@ -41,7 +41,7 @@ namespace Memory_InSchritten
 
         private int cardCount;
 
-        private string _Id = "default";
+        private string _Id;
 
         private bool player1turn = true;
 
@@ -60,6 +60,16 @@ namespace Memory_InSchritten
         private List<string> Cards = [];
         public MainWindow()
         {
+            // generate an id and save it in a file if the file doesnt already exist
+            if (!File.Exists("id.txt"))
+            {
+                _Id = Guid.NewGuid().ToString();
+                File.WriteAllText("id.txt", _Id);
+            }
+            else
+            {
+                _Id = File.ReadAllText("id.txt");
+            }
             InitializeComponent();
         }
 

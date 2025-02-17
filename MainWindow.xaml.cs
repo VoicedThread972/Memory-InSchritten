@@ -37,7 +37,11 @@ namespace Memory_InSchritten
 
         private bool _allowMove;
 
+        private bool silent;
+
         private int cardCount;
+
+        private string _Id = "default";
 
         private bool player1turn = true;
 
@@ -45,7 +49,7 @@ namespace Memory_InSchritten
 
         private List<(int,int)> Moves = [];
 
-        private const string ServerIp = "192.168.178.34";
+        private const string ServerIp = "10.10.79.182";
 
         private const int GamePort = 51322;
 
@@ -135,7 +139,7 @@ namespace Memory_InSchritten
         {
             var row = await ReadInt();
             var column = await ReadInt();
-            
+
             return (row, column);
         }
 
@@ -163,14 +167,77 @@ namespace Memory_InSchritten
                     await Shuffle();
                     await SendString("OK");
                     break;
-                case "move":
+                case "readcard":
                     await SendString("ACK");
-                    await Move();
+                    await ReadCard();
+                    await SendString("OK");
+                    break;
+                case "sendcard":
+                    await SendString("ACK");
+                    await SendCard();
+                    await SendString("OK");
+                    break;
+                case "resync":
+                    await SendString("ACK");
+                    await Resync();
                     await SendString("OK");
                     break;
                 default:
                     await SendString("FAIL");
                     break;
+            }
+        }
+
+        private async Task Resync()
+        {
+            Player1.PlayerName.Text = await ReadString();
+            var nameSet = !string.IsNullOrEmpty(Player1.PlayerName.Text);
+            await SetName(nameSet);
+
+            await Turn();
+
+            await Shuffle();
+
+            var count = await ReadInt();
+            silent = true;
+            for (var i=0; i<count; i++)
+            {
+                await SendCard();
+            }
+            silent = false;
+        }
+
+        private async Task ReadCard()
+        {
+            try
+            {
+                while (Moves.Count == 0)  await Task.Delay(10);
+                await SendRowCol(Moves.First().Item1, Moves.First().Item2);
+                Moves.RemoveAt(0);
+            }
+            catch (Exception e)
+            {
+                MessageBox.Show(e.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
+                Online = false;
+            }
+        }
+
+        private async Task SendCard()
+        {
+            try
+            {
+                (var row, var column) = await ReadRowCol();
+
+                _allowMove = true;
+
+                Button btn = Grid.Children.OfType<Button>().FirstOrDefault(b => (int)b.GetValue(Grid.RowProperty) == row && (int)b.GetValue(Grid.ColumnProperty) == column)!;
+                while (Open.Count > 1) await Task.Delay(10);
+                ShowCard(btn, new RoutedEventArgs());
+            }
+            catch (Exception e)
+            {
+                MessageBox.Show(e.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
+                Online = false;
             }
         }
 
@@ -182,6 +249,7 @@ namespace Memory_InSchritten
             {
                 _client = new TcpClient();
                 await _client.ConnectAsync(serverIp, port);
+                await SendString(_Id);
 
                 ShowDialog("Verbindung zum Server hergestellt!");
 
@@ -246,12 +314,9 @@ namespace Memory_InSchritten
                 }
                 else
                 {
-                    while (Moves.Count == 0)
-                    {
-                        await Task.Delay(500);
-                    }
-                    await SendInt(Moves.First().Item1);
-                    await SendInt(Moves.First().Item2);
+                    while (Moves.Count == 0) await Task.Delay(10);
+
+                    await SendRowCol(Moves.First().Item1, Moves.First().Item2);
                     Moves.RemoveAt(0);
                 }
             }
@@ -259,7 +324,6 @@ namespace Memory_InSchritten
             {
                 MessageBox.Show(e.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
                 Online = false;
-                return;
             }
 
         }
@@ -296,22 +360,24 @@ namespace Memory_InSchritten
             msg.Dispose();
         }
 
-        private async Task SetName()
+        private async Task SetName(bool nameSet = false)
         {
-            var p1Name = await ShowInputDialog("Player 1", "Spieler 1 Name");
-            while (p1Name.Length is > 10 or 0)
+            if (!nameSet)
             {
-                ShowDialog("Ungültiger Name");
-                p1Name = await ShowInputDialog("Player 1", "Spieler 1 Name");
+                var p1Name = await ShowInputDialog("Player 1", "Spieler 1 Name");
+                while (p1Name.Length is > 10 or 0)
+                {
+                    ShowDialog("Ungültiger Name");
+                    p1Name = await ShowInputDialog("Player 1", "Spieler 1 Name");
+                }
+                Player1.PlayerName.Text = p1Name;
             }
-
-            Player1.PlayerName.Text = p1Name;
 
             if (Online)
             {
                 try
                 {
-                    await SendString(Player1.PlayerName.Text);
+                    if (!nameSet) await SendString(Player1.PlayerName.Text);
                     Player2.PlayerName.Text = await ReadString();
                     ShowDialog("Gegner gefunden!");
                 }
@@ -428,9 +494,13 @@ namespace Memory_InSchritten
             }
         }
 
-        private void CoverCards(bool silent = false)
+        private void CoverCards()
         {
             if (!silent) MessageBox.Show("Die Karten werden gedeckt", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            player1turn = !player1turn;
+            Player1.Rect.Fill = player1turn ? Brushes.DeepSkyBlue : Brushes.LightGray;
+            Player2.Rect.Fill = player1turn ? Brushes.LightGray : Brushes.DeepSkyBlue;
             
             foreach (var child in Grid.Children)
             {
@@ -441,14 +511,11 @@ namespace Memory_InSchritten
                     btn.Focusable = true;
                 }
             }
-            player1turn = !player1turn;
-            Player1.Rect.Fill = player1turn ? Brushes.DeepSkyBlue : Brushes.LightGray;
-            Player2.Rect.Fill = player1turn ? Brushes.LightGray : Brushes.DeepSkyBlue;
 
             Open = [];
         }
 
-        private void CardPair(bool silent = false)
+        private void CardPair()
         {
             Open = [];
             if (!silent) MessageBox.Show("Paar gefunden", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -493,15 +560,7 @@ namespace Memory_InSchritten
                 int row = (int)btn.GetValue(Grid.RowProperty);
                 int column = (int)btn.GetValue(Grid.ColumnProperty);
 
-                try
-                {
-                    Moves.Add((row, column));
-                }
-                catch (Exception ex)
-                {
-                    Online = false;
-                    MessageBox.Show(ex.Message, "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
+                Moves.Add((row, column));
             }
 
             if (pair) CardPair();

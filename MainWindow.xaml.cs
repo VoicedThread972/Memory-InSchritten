@@ -49,8 +49,9 @@ namespace Memory_InSchritten
 
         private readonly List<(int,int)> Moves = [];
 
-        private const string ServerIp = "10.10.79.182";
-        //private const string ServerIp = "192.168.178.34";
+        private const string ServerIp = "10.10.77.58";
+        private const string Server1Ip = "10.10.79.182";
+        private const string Server2Ip = "192.168.178.34";
 
         private const int GamePort = 51322;
 
@@ -61,7 +62,6 @@ namespace Memory_InSchritten
         private List<string> Cards = [];
         public MainWindow()
         {
-            // generate an id and save it in a file if the file doesnt already exist
             if (!File.Exists("id.txt"))
             {
                 SendString("").RunSynchronously();
@@ -216,7 +216,7 @@ namespace Memory_InSchritten
             catch (Exception e)
             {
                 Online = false;
-                MessageBox.Show($"[ReadCard] {e.Message}", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
+                throw;
             }
         }
 
@@ -235,18 +235,32 @@ namespace Memory_InSchritten
             catch (Exception e)
             {
                 Online = false;
-                MessageBox.Show($"[SendCard] {e.Message}", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
+                throw;
             }
         }
 
-        private async Task StartClient(string serverIp, int port)
+        private async Task StartClient()
         {
             if (!Online) return;
 
             try
             {
                 _client = new TcpClient();
-                await _client.ConnectAsync(serverIp, port);
+                try
+                {
+                    await Task.WhenAny(_client.ConnectAsync(ServerIp, GamePort), Task.Delay(2000));
+                }
+                catch
+                {
+                    try
+                    {
+                        await Task.WhenAny(_client.ConnectAsync(Server1Ip, GamePort), Task.Delay(2000));
+                    }
+                    catch
+                    {
+                        await Task.WhenAny(_client.ConnectAsync(Server2Ip, GamePort), Task.Delay(2000));
+                    }
+                }
                 await SendString(_Id);
 
                 await ShowDialog("Verbindung zum Server hergestellt!");
@@ -517,6 +531,8 @@ namespace Memory_InSchritten
                 {
                     Player1.Score.Content = score1;
                     Player2.Score.Content = score2;
+                    _client?.Close();
+                    Online = false;
                     MessageBox.Show($"Spiel beendet!{Environment.NewLine}{(score1 > score2 ? Player1.PlayerName.Text : score1 < score2 ? Player2.PlayerName.Text : "Niemand")} gewinnt", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
                     _ = Reset();
                     return;
@@ -588,7 +604,7 @@ namespace Memory_InSchritten
 
             if (Online)
             {
-                await StartClient(ServerIp, GamePort);
+                await StartClient();
             }
             else
             {

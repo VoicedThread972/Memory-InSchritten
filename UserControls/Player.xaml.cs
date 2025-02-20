@@ -54,7 +54,7 @@ namespace Memory_InSchritten.UserControls
             return 20;
         }
 
-        private void CalcFontSize()
+        public void CalcFontSize()
         {
             PlayerName.FontSize = CalcFontSize(PlayerName);
 

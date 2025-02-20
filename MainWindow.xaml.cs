@@ -47,11 +47,11 @@ namespace Memory_InSchritten
 
         private List<string> Open = [];
 
+        private static List<Dialog> OpenDialogs = [];
+
         private readonly List<(int,int)> Moves = [];
 
-        private const string ServerIp = "10.10.77.58";
-        private const string Server1Ip = "10.10.79.182";
-        private const string Server2Ip = "192.168.178.34";
+        private static readonly List<string> Servers = ["10.10.77.58", "10.10.79.182", "192.168.178.34"];
 
         private const int GamePort = 51322;
 
@@ -64,7 +64,7 @@ namespace Memory_InSchritten
         {
             if (!File.Exists("id.txt"))
             {
-                SendString("").RunSynchronously();
+                SendString("").Wait();
                 _Id = ReadString().Result;
                 File.WriteAllText("id.txt", _Id);
             }
@@ -177,8 +177,8 @@ namespace Memory_InSchritten
             }
             catch (Exception e)
             {
-                Online = false;
                 MessageBox.Show($"[HandleRequest:{command}] {e.Message}", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
+                await Reset(true);
             }
         }
 
@@ -187,6 +187,8 @@ namespace Memory_InSchritten
             Player1.PlayerName.Text = await ReadString();
             var nameSet = !string.IsNullOrEmpty(Player1.PlayerName.Text);
             await SetName(nameSet);
+
+            await SetScore();
 
             await SetCards();
 
@@ -205,38 +207,30 @@ namespace Memory_InSchritten
             silent = false;
         }
 
+        private async Task SetScore()
+        {
+            Player1.Score.Content = await ReadInt();
+            Player2.Score.Content = await ReadInt();
+            Player1.CalcFontSize();
+            Player2.CalcFontSize();
+        }
+
         private async Task ReadCard()
         {
-            try
-            {
-                while (Moves.Count == 0)  await Task.Delay(10);
-                await SendRowCol(Moves[0]);
-                Moves.RemoveAt(0);
-            }
-            catch (Exception e)
-            {
-                Online = false;
-                throw;
-            }
+            while (Moves.Count == 0)  await Task.Delay(10);
+            await SendRowCol(Moves[0]);
+            Moves.RemoveAt(0);
         }
 
         private async Task SendCard()
         {
-            try
-            {
-                (var row, var column) = await ReadRowCol();
+            (var row, var column) = await ReadRowCol();
 
-                _allowMove = true;
+            _allowMove = true;
 
-                Button btn = Grid.Children.OfType<Button>().FirstOrDefault(b => (int)b.GetValue(Grid.RowProperty) == row && (int)b.GetValue(Grid.ColumnProperty) == column)!;
-                while (Open.Count > 1) await Task.Delay(10);
-                ShowCard(btn, new RoutedEventArgs());
-            }
-            catch (Exception e)
-            {
-                Online = false;
-                throw;
-            }
+            Button btn = Grid.Children.OfType<Button>().FirstOrDefault(b => (int)b.GetValue(Grid.RowProperty) == row && (int)b.GetValue(Grid.ColumnProperty) == column)!;
+            while (Open.Count > 1) await Task.Delay(10);
+            ShowCard(btn, new RoutedEventArgs());
         }
 
         private async Task StartClient()
@@ -245,22 +239,22 @@ namespace Memory_InSchritten
 
             try
             {
-                _client = new TcpClient();
-                try
+                _ = ShowDialog("Verbindung mit dem Server wird aufgebaut...", true);
+                foreach (var ip in Servers)
                 {
-                    await Task.WhenAny(_client.ConnectAsync(ServerIp, GamePort), Task.Delay(2000));
-                }
-                catch
-                {
+                    _client = new TcpClient();
                     try
                     {
-                        await Task.WhenAny(_client.ConnectAsync(Server1Ip, GamePort), Task.Delay(2000));
+                        await Task.WhenAny(_client.ConnectAsync(ip, GamePort), Task.Delay(2000));
+                        if (!_client.Connected) throw new SocketException();
+                        break;
                     }
                     catch
                     {
-                        await Task.WhenAny(_client.ConnectAsync(Server2Ip, GamePort), Task.Delay(2000));
+                        _client.Close();
                     }
                 }
+
                 await SendString(_Id);
 
                 await ShowDialog("Verbindung zum Server hergestellt!");
@@ -283,17 +277,9 @@ namespace Memory_InSchritten
         {
             if (Online)
             {
-                try
-                {
-                    player1turn = await ReadInt() == 0;
-                }
-                catch (Exception e)
-                {
-                    Online = false;
-                    MessageBox.Show($"[Turn] {e.Message}", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
+                player1turn = await ReadInt() == 0;
             }
-            if (!Online)
+            else
             {
                 player1turn = new Random().Next(2) == 0;
             }
@@ -329,8 +315,15 @@ namespace Memory_InSchritten
             return msg.InputText ?? "";
         }
 
-        private static async Task ShowDialog(string text)
+        private static async Task ShowDialog(string text, bool infinite = false)
         {
+            foreach (var old in OpenDialogs)
+            {
+                old.Close();
+                old.Dispose();
+            }
+            OpenDialogs = [];
+
             var msg = new Dialog
             {
                 Text =
@@ -339,9 +332,16 @@ namespace Memory_InSchritten
                 }
             };
             msg.Show();
-            await Task.Delay(1000);
-            msg.Close();
-            msg.Dispose();
+            if (!infinite)
+            {
+                await Task.Delay(1000);
+                msg.Close();
+                msg.Dispose();
+            }
+            else
+            {
+                OpenDialogs.Add(msg);
+            }
         }
 
         private async Task<string> GetDefaultName()
@@ -356,7 +356,7 @@ namespace Memory_InSchritten
             if (!nameSet)
             {
                 var p1Name = await ShowInputDialog(defName, "Spieler 1 Name");
-                while (p1Name.Length is > 10 or 0)
+                while (p1Name.Length is > 32 or 0)
                 {
                     await ShowDialog("Ungültiger Name");
                     p1Name = await ShowInputDialog(defName, "Spieler 1 Name");
@@ -366,22 +366,15 @@ namespace Memory_InSchritten
 
             if (Online)
             {
-                try
-                {
-                    if (!nameSet) await SendString(Player1.PlayerName.Text);
-                    Player2.PlayerName.Text = await ReadString();
-                    await ShowDialog("Gegner gefunden!");
-                }
-                catch (Exception e)
-                {
-                    MessageBox.Show($"[SetName] {e.Message}", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
-                    Online = false;
-                }
+                if (!nameSet) await SendString(Player1.PlayerName.Text);
+                _ = ShowDialog("Suche nach Gegner...", true);
+                Player2.PlayerName.Text = await ReadString();
+                await ShowDialog("Gegner gefunden!");
             }
-            if (!Online)
+            else
             {
                 var p2Name = await ShowInputDialog("Player 2", "Spieler 2 Name");
-                while (p2Name.Length is > 10 or 0)
+                while (p2Name.Length is > 32 or 0)
                 {
                     await ShowDialog("Ungültiger Name");
                     p2Name = await ShowInputDialog("Player 2", "Spieler 2 Name");
@@ -435,22 +428,14 @@ namespace Memory_InSchritten
         {
             if (Online)
             {
-                try
+                cardCount = await ReadInt();
+                for (var i = 0; i < cardCount; i++)
                 {
-                    cardCount = await ReadInt();
-                    for (var i = 0; i < cardCount; i++)
-                    {
-                        var index = await ReadInt();
-                        (Cards[i], Cards[index]) = (Cards[index], Cards[i]);
-                    }
-                }
-                catch (Exception e)
-                {
-                    MessageBox.Show($"[Shuffle] {e.Message}", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
-                    Online = false;
+                    var index = await ReadInt();
+                    (Cards[i], Cards[index]) = (Cards[index], Cards[i]);
                 }
             }
-            if (!Online)
+            else
             {
                 for (var i = 0; i < Cards.Count; i++)
                 {
@@ -531,14 +516,18 @@ namespace Memory_InSchritten
                 {
                     Player1.Score.Content = score1;
                     Player2.Score.Content = score2;
+                    Player1.CalcFontSize();
+                    Player2.CalcFontSize();
+                    while (Moves.Count > 0 && Online) Task.Delay(500).Wait();
                     _client?.Close();
-                    Online = false;
                     MessageBox.Show($"Spiel beendet!{Environment.NewLine}{(score1 > score2 ? Player1.PlayerName.Text : score1 < score2 ? Player2.PlayerName.Text : "Niemand")} gewinnt", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
                     _ = Reset();
                     return;
                 }
                 Player1.Score.Content = score1;
                 Player2.Score.Content = score2;
+                Player1.CalcFontSize();
+                Player2.CalcFontSize();
             }
         }
 
@@ -580,7 +569,7 @@ namespace Memory_InSchritten
             Online = msg == MessageBoxResult.Yes;
         }
 
-        private async Task Reset()
+        private async Task Reset(bool reconnect=false)
         {
             _client?.Close();
 
@@ -600,7 +589,7 @@ namespace Memory_InSchritten
                 Grid.Children.Remove(child);
             }
 
-            GetOnline();
+            if (!reconnect) GetOnline();
 
             if (Online)
             {
@@ -612,7 +601,7 @@ namespace Memory_InSchritten
 
                 await Turn();
 
-                await SetCardCount();
+                await SetCards();
 
                 await Shuffle();
             }

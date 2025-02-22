@@ -22,6 +22,7 @@
         <StackPanel x:Name="Panel" Margin="10">
             <Label x:Name="Title" Content="Spieler" HorizontalAlignment="Center"/>
             <TextBox x:Name="PlayerName" IsReadOnly="True" Background="LightGray" TextChanged="PlayerName_TextChanged" HorizontalContentAlignment="Center"/>
+            <Label x:Name="Elo" Content="ELO: 0" HorizontalAlignment="Center"/>
             <Label x:Name="Score" Content="0" HorizontalAlignment="Center"/>
         </StackPanel>
     </Grid>

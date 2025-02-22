@@ -14,6 +14,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -23,6 +24,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using static System.Formats.Asn1.AsnWriter;
 
 namespace Memory_InSchritten
 {
@@ -44,6 +46,14 @@ namespace Memory_InSchritten
         private readonly string _Id;
 
         private bool player1turn = true;
+
+        private int p1Score;
+
+        private int p2Score;
+
+        private int p1Elo;
+
+        private int p2Elo;
 
         private List<string> Open = [];
 
@@ -170,6 +180,11 @@ namespace Memory_InSchritten
                         await Resync();
                         await SendString("OK");
                         break;
+                    case "End":
+                        await SendString("ACK");
+                        await SendString("OK");
+                        await Reset();
+                        break;
                     default:
                         await SendString("FAIL");
                         break;
@@ -177,6 +192,7 @@ namespace Memory_InSchritten
             }
             catch (Exception e)
             {
+                if (command == "None") return;
                 MessageBox.Show($"[HandleRequest:{command}] {e.Message}", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
                 await Reset(true);
             }
@@ -188,7 +204,7 @@ namespace Memory_InSchritten
             var nameSet = !string.IsNullOrEmpty(Player1.PlayerName.Text);
             await SetName(nameSet);
 
-            await SetScore();
+            await SetElo();
 
             await SetCards();
 
@@ -207,10 +223,10 @@ namespace Memory_InSchritten
             silent = false;
         }
 
-        private async Task SetScore()
+        private async Task SetElo()
         {
-            Player1.Score.Content = await ReadInt();
-            Player2.Score.Content = await ReadInt();
+            Player1.Elo.Content = "ELO: " + (p1Elo = await ReadInt());
+            Player2.Elo.Content = "ELO: " + (p2Elo = await ReadInt());
             Player1.CalcFontSize();
             Player2.CalcFontSize();
         }
@@ -239,7 +255,7 @@ namespace Memory_InSchritten
 
             try
             {
-                _ = ShowDialog("Verbindung mit dem Server wird aufgebaut...", true);
+                _ = ShowDialog("Verbindung wird aufgebaut...", true);
                 foreach (var ip in Servers)
                 {
                     _client = new TcpClient();
@@ -508,33 +524,25 @@ namespace Memory_InSchritten
         private void CardPair()
         {
             Open = [];
-            if (!silent) MessageBox.Show("Paar gefunden", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
+            if (!silent) _ = ShowDialog("Paar gefunden");
 
-            if (int.TryParse(Player1.Score.Content.ToString() ?? "", out var score1) && int.TryParse(Player2.Score.Content.ToString() ?? "", out var score2))
+            var end = (player1turn ? ++p1Score + p2Score : ++p2Score + p1Score) >= Cards.Count / 2;
+
+            Player1.Score.Content = p1Score;
+            Player2.Score.Content = p2Score;
+            Player1.Elo.Content = "ELO: " + (p1Elo + p1Score);
+            Player2.Elo.Content = "ELO: " + (p2Elo + p2Score);
+            Player1.CalcFontSize();
+            Player2.CalcFontSize();
+            if (end)
             {
-                if ((player1turn ? ++score1 + score2 : ++score2 + score1) >= Cards.Count / 2)
-                {
-                    Player1.Score.Content = score1;
-                    Player2.Score.Content = score2;
-                    Player1.CalcFontSize();
-                    Player2.CalcFontSize();
-                    while (Moves.Count > 0 && Online) Task.Delay(500).Wait();
-                    _client?.Close();
-                    MessageBox.Show($"Spiel beendet!{Environment.NewLine}{(score1 > score2 ? Player1.PlayerName.Text : score1 < score2 ? Player2.PlayerName.Text : "Niemand")} gewinnt", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
-                    _ = Reset();
-                    return;
-                }
-                Player1.Score.Content = score1;
-                Player2.Score.Content = score2;
-                Player1.CalcFontSize();
-                Player2.CalcFontSize();
+                MessageBox.Show($"Spiel beendet!{Environment.NewLine}{(p1Score > p2Score ? Player1.PlayerName.Text : p1Score < p2Score ? Player2.PlayerName.Text : "Niemand")} gewinnt", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
+                _ = Reset();
             }
         }
-
         private void ShowCard(object sender, RoutedEventArgs e)
         {
             if (sender is not Button btn) return;
-
             if (!_allowMove && Online && !player1turn) return;
 
             _allowMove = false;
@@ -571,12 +579,15 @@ namespace Memory_InSchritten
 
         private async Task Reset(bool reconnect=false)
         {
+            while (Moves.Count > 0 && Online) await Task.Delay(500);
             _client?.Close();
 
             player1turn = true;
             Player1.Rect.Fill = Brushes.DeepSkyBlue;
             Player2.Rect.Fill = Brushes.LightGray;
 
+            p1Score = 0;
+            p2Score = 0;
             Player1.Score.Content = "0";
             Player2.Score.Content = "0";
 

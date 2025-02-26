@@ -61,6 +61,8 @@ namespace Memory_InSchritten.UserControls
             Title.FontSize = CalcFontSize(Title);
 
             Score.FontSize = CalcFontSize(Score);
+
+            Elo.FontSize = CalcFontSize(Elo);
         }
 
         private static double CalcFontSize(string s, double maxWidth, double maxHeight, Typeface typeFont)

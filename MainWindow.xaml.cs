@@ -41,7 +41,7 @@ namespace Memory_InSchritten
 
         private int cardCount;
 
-        private readonly string _Id;
+        private string? _Id;
 
         private bool player1turn = true;
 
@@ -62,13 +62,7 @@ namespace Memory_InSchritten
         private List<string> Cards = [];
         public MainWindow()
         {
-            if (!File.Exists("id.txt"))
-            {
-                SendString("").Wait();
-                _Id = ReadString().Result;
-                File.WriteAllText("id.txt", _Id);
-            }
-            else
+            if (File.Exists("id.txt"))
             {
                 _Id = File.ReadAllText("id.txt");
             }
@@ -255,7 +249,12 @@ namespace Memory_InSchritten
                     }
                 }
 
-                await SendString(_Id);
+                await SendString(_Id ?? "");
+                if (_Id is null)
+                {
+                    _Id = await ReadString();
+                    File.WriteAllText("id.txt", _Id);
+                }
 
                 await ShowDialog("Verbindung zum Server hergestellt!");
 

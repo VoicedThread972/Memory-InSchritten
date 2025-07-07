@@ -1,5 +1,6 @@
 ﻿using Memory_InSchritten.UserControls;
 using Microsoft.VisualBasic;
+using Microsoft.Win32;
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
@@ -61,9 +62,9 @@ namespace Memory_InSchritten
 
         private readonly List<(int,int)> Moves = [];
 
-        private static readonly List<string> Servers = ["10.10.77.58", "10.10.79.182", "192.168.178.34"];
+        private static readonly List<string> Servers = ["public.memory-server.com"]; //, "10.10.77.58", "10.10.79.182", "192.168.178.34"];
 
-        private const int GamePort = 51322;
+        private const int GamePort = 31322;
 
         private TcpClient? _client;
 
@@ -536,7 +537,7 @@ namespace Memory_InSchritten
             if (end)
             {
                 MessageBox.Show($"Spiel beendet!{Environment.NewLine}{(p1Score > p2Score ? Player1.PlayerName.Text : p1Score < p2Score ? Player2.PlayerName.Text : "Niemand")} gewinnt", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
-                _ = Reset();
+                //_ = Reset();
             }
         }
         private void ShowCard(object sender, RoutedEventArgs e)

@@ -537,7 +537,6 @@ namespace Memory_InSchritten
             if (end)
             {
                 MessageBox.Show($"Spiel beendet!{Environment.NewLine}{(p1Score > p2Score ? Player1.PlayerName.Text : p1Score < p2Score ? Player2.PlayerName.Text : "Niemand")} gewinnt", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
-                //_ = Reset();
             }
         }
         private void ShowCard(object sender, RoutedEventArgs e)
@@ -581,6 +580,7 @@ namespace Memory_InSchritten
         {
             while (Moves.Count > 0 && Online) await Task.Delay(500);
             _client?.Close();
+            _client?.Dispose();
 
             player1turn = true;
             Player1.Rect.Fill = Brushes.DeepSkyBlue;
@@ -588,8 +588,12 @@ namespace Memory_InSchritten
 
             p1Score = 0;
             p2Score = 0;
+
             Player1.Score.Content = "0";
             Player2.Score.Content = "0";
+
+            Player2.Elo.Content = "0";
+            Player2.PlayerName.Text = "";
 
             cardPath = Directory.GetCurrentDirectory() + @"\bilder\";
             Cards = [];

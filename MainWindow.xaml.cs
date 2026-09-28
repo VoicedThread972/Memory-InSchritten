@@ -11,7 +11,7 @@ using System.Linq.Expressions;
 using System.Net;
 using System.Net.Mail;
 using System.Net.NetworkInformation;
-using System.Net.Sockets;
+using System.Net.WebSockets;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -41,11 +41,16 @@ namespace Memory_InSchritten
 
         private bool _allowMove;
 
+        private bool _covering;
+
         private bool silent;
 
         private int cardCount;
 
         private string? _Id;
+
+        private static readonly string IdPath = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Memory-InSchritten", "id.txt");
 
         private bool player1turn = true;
 
@@ -63,20 +68,26 @@ namespace Memory_InSchritten
 
         private readonly List<(int,int)> Moves = [];
 
-        private static readonly List<string> Servers = ["memory-server.francesco.kuberneteslv.dmz.becksche.de"]; //, "10.10.77.58", "10.10.79.182", "192.168.178.34"];
+        private static readonly Uri GameEndpoint = new(
+            Environment.GetEnvironmentVariable("MEMORY_GAME_URL") ?? "wss://memory-server.francesco.kuberneteslv.dmz.becksche.de/game");
 
-        private const int GamePort = 80; //51322
+        private ClientWebSocket? _client;
 
-        private TcpClient? _client;
-
-        private readonly ImageBrush Covered = new(new BitmapImage(new Uri(Directory.GetCurrentDirectory() + @"\bilder\starsolid.gif")));
+        private readonly ImageBrush Covered = new(new BitmapImage(new Uri(System.IO.Path.Combine(AppContext.BaseDirectory, "bilder", "starsolid.gif"))));
 
         private List<string> Cards = [];
         public MainWindow()
         {
-            if (File.Exists("id.txt"))
+            if (File.Exists(IdPath))
             {
-                _Id = File.ReadAllText("id.txt");
+                _Id = File.ReadAllText(IdPath);
+            }
+            else if (File.Exists("id.txt") || File.Exists(System.IO.Path.Combine(AppContext.BaseDirectory, "id.txt")))
+            {
+                var oldIdPath = File.Exists("id.txt") ? "id.txt" : System.IO.Path.Combine(AppContext.BaseDirectory, "id.txt");
+                _Id = File.ReadAllText(oldIdPath);
+                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(IdPath)!);
+                File.WriteAllText(IdPath, _Id);
             }
             InitializeComponent();
         }
@@ -87,12 +98,12 @@ namespace Memory_InSchritten
             if (bytes.Length > 256) throw new InvalidDataException("String exceeds 256 bytes.");
 
             await SendInt(bytes.Length);
-            await SendBytes(bytes);
+            if (bytes.Length > 0) await SendBytes(bytes);
         }
 
-        private async Task<string> ReadString()
+        private async Task<string> ReadString(bool allowIdle = false)
         {
-            var length = await ReadInt();
+            var length = await ReadInt(allowIdle);
 
             if (length == 0) return "";
             if (length < 0 || length > 256) throw new InvalidDataException("Invalid string length.");
@@ -108,37 +119,38 @@ namespace Memory_InSchritten
             await SendBytes(bytes);
         }
 
-        private async Task<int> ReadInt()
+        private async Task<int> ReadInt(bool allowIdle = false)
         {
-            byte[] dataBytes = await ReadBytes(sizeof(int));
+            byte[] dataBytes = await ReadBytes(sizeof(int), allowIdle);
             return BinaryPrimitives.ReadInt32LittleEndian(dataBytes);
         }
 
         private async Task SendBytes(byte[] data)
         {
-            NetworkStream stream = _client!.GetStream();
-
-            await stream.WriteAsync(data);
+            await _client!.SendAsync(data.AsMemory(), WebSocketMessageType.Binary, true, CancellationToken.None);
         }
 
-        private async Task<byte[]> ReadBytes(int expectedSize)
+        private async Task<byte[]> ReadBytes(int expectedSize, bool allowIdle = false)
         {
             if (expectedSize is <= 0 or > 256) throw new InvalidDataException("Invalid frame length.");
-            NetworkStream stream = _client!.GetStream();
             byte[] buffer = new byte[expectedSize];
             int totalRead = 0;
 
-            while (totalRead < expectedSize)
+            while (true)
             {
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-                int bytesRead = await stream.ReadAsync(buffer.AsMemory(totalRead, expectedSize - totalRead), timeout.Token);
-                if (bytesRead == 0)
+                using var timeout = new CancellationTokenSource();
+                if (!allowIdle || totalRead > 0) timeout.CancelAfter(TimeSpan.FromSeconds(30));
+                var result = await _client!.ReceiveAsync(buffer.AsMemory(totalRead), timeout.Token);
+                if (result.MessageType != WebSocketMessageType.Binary || result.Count == 0)
+                    throw new IOException("WebSocket closed or sent a non-binary message.");
+                totalRead += result.Count;
+                if (result.EndOfMessage)
                 {
-                    throw new Exception("Connection lost");
+                    if (totalRead != expectedSize) throw new InvalidDataException("Unexpected message size.");
+                    return buffer;
                 }
-                totalRead += bytesRead;
+                if (totalRead == expectedSize) throw new InvalidDataException("Message exceeds expected size.");
             }
-            return buffer;
         }
 
         private async Task SendRowCol((int, int) rowCol)
@@ -157,7 +169,7 @@ namespace Memory_InSchritten
 
         private async Task<bool> HandleRequests()
         {
-            var command = await ReadString();
+            var command = await ReadString(true);
             switch (command)
             {
                 case "Read":
@@ -230,10 +242,16 @@ namespace Memory_InSchritten
         private async Task ReadCard()
         {
             _allowMove = true;
+            var lastKeepalive = DateTime.UtcNow;
             while (Moves.Count == 0)
             {
-                if (_client!.Client.Poll(0, SelectMode.SelectRead) && _client.Available == 0)
+                if (_client!.State != WebSocketState.Open)
                     throw new IOException("Connection lost while waiting for a move.");
+                if (DateTime.UtcNow - lastKeepalive >= TimeSpan.FromSeconds(10))
+                {
+                    await SendInt(-1);
+                    lastKeepalive = DateTime.UtcNow;
+                }
                 await Task.Delay(100);
             }
             await SendRowCol(Moves[0]);
@@ -247,7 +265,7 @@ namespace Memory_InSchritten
             Button btn = Grid.Children.OfType<Button>().FirstOrDefault(b => (int)b.GetValue(Grid.RowProperty) == row && (int)b.GetValue(Grid.ColumnProperty) == column)!;
             if (btn is null || !btn.IsHitTestVisible) throw new InvalidDataException("Invalid card in move history.");
             while (Open.Count > 1) await Task.Delay(10);
-            RevealCard(btn);
+            await RevealCard(btn);
         }
 
         private async Task StartClient()
@@ -259,28 +277,26 @@ namespace Memory_InSchritten
                 try
                 {
                     _ = ShowDialog("Verbindung wird aufgebaut...", true);
-                    foreach (var ip in Servers)
+                    var candidate = new ClientWebSocket();
+                    candidate.Options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+                    try
                     {
-                        var candidate = new TcpClient();
-                        try
-                        {
-                            await candidate.ConnectAsync(ip, GamePort).WaitAsync(TimeSpan.FromSeconds(2));
-                            _client = candidate;
-                            break;
-                        }
-                        catch
-                        {
-                            candidate.Dispose();
-                        }
+                        await candidate.ConnectAsync(GameEndpoint, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+                        _client = candidate;
+                    }
+                    catch
+                    {
+                        candidate.Dispose();
+                        throw;
                     }
 
-                    if (_client is null) throw new IOException("No server is reachable.");
                     await SendString(_Id ?? "");
                     if (string.IsNullOrWhiteSpace(_Id))
                     {
                         _Id = await ReadString();
                         if (string.IsNullOrWhiteSpace(_Id)) throw new InvalidDataException("Server sent an empty player ID.");
-                        File.WriteAllText("id.txt", _Id);
+                        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(IdPath)!);
+                        File.WriteAllText(IdPath, _Id);
                     }
 
                     await ShowDialog("Verbindung zum Server hergestellt!");
@@ -340,7 +356,7 @@ namespace Memory_InSchritten
             {
                 await Task.Delay(500);
             }
-            msg.Close();
+            if (msg.IsVisible) msg.Close();
             msg.Dispose();
             return msg.InputText ?? "";
         }
@@ -398,7 +414,7 @@ namespace Memory_InSchritten
             {
                 await SendString(Player1.PlayerName.Text);
                 _ = ShowDialog("Suche nach Gegner...", true);
-                Player2.PlayerName.Text = await ReadString();
+                Player2.PlayerName.Text = await ReadString(true);
                 await ShowDialog("Gegner gefunden!");
             }
             else
@@ -460,7 +476,7 @@ namespace Memory_InSchritten
         {
             if (Online)
             {
-                cardCount = await ReadInt();
+                cardCount = await ReadInt(true);
                 if (cardCount < 4 || cardCount > Cards.Count || cardCount % 4 != 0)
                     throw new InvalidDataException("Invalid negotiated card count.");
                 Cards.RemoveRange(cardCount, Cards.Count - cardCount);
@@ -522,13 +538,15 @@ namespace Memory_InSchritten
             }
         }
 
-        private void CoverCards()
+        private async Task CoverCards()
         {
+            _covering = true;
+            var currentCards = Cards;
             if (!silent)
             {
-                if (Online) _ = ShowDialog("Die Karten werden gedeckt");
-                else MessageBox.Show("Die Karten werden gedeckt", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
+                await Task.Delay(1000);
             }
+            if (!ReferenceEquals(currentCards, Cards)) return;
 
             player1turn = !player1turn;
             Player1.Rect.Fill = player1turn ? Brushes.DeepSkyBlue : Brushes.LightGray;
@@ -543,6 +561,7 @@ namespace Memory_InSchritten
             }
 
             Open = [];
+            _covering = false;
         }
 
         private void CardPair()
@@ -565,15 +584,15 @@ namespace Memory_InSchritten
                 else MessageBox.Show(result, "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
-        private void ShowCard(object sender, RoutedEventArgs e)
+        private async void ShowCard(object sender, RoutedEventArgs e)
         {
             if (sender is not Button btn) return;
-            if (Online && (!player1turn || !_allowMove)) return;
+            if (_covering || (Online && (!player1turn || !_allowMove))) return;
 
-            RevealCard(btn);
+            await RevealCard(btn);
         }
 
-        private void RevealCard(Button btn)
+        private async Task RevealCard(Button btn)
         {
             if (!btn.IsHitTestVisible) return;
 
@@ -600,7 +619,7 @@ namespace Memory_InSchritten
             }
 
             if (pair) CardPair();
-            else if(cover) CoverCards();
+            else if(cover) await CoverCards();
         }
 
         private void GetOnline()
@@ -613,7 +632,8 @@ namespace Memory_InSchritten
         {
             Moves.Clear();
             _allowMove = false;
-            _client?.Close();
+            _covering = false;
+            _client?.Abort();
             _client?.Dispose();
 
             player1turn = true;
@@ -629,7 +649,7 @@ namespace Memory_InSchritten
             Player2.Elo.Content = "ELO: 0";
             Player2.PlayerName.Text = "";
 
-            cardPath = Directory.GetCurrentDirectory() + @"\bilder\";
+            cardPath = System.IO.Path.Combine(AppContext.BaseDirectory, "bilder") + System.IO.Path.DirectorySeparatorChar;
             Cards = [];
             Open = [];
 

@@ -41,6 +41,7 @@ namespace Memory_InSchritten.UserControls
         {
             IsAlive = true;
             InitializeComponent();
+            Closed += (_, _) => IsAlive = false;
         }
 
         private void Ok_Click(object sender, RoutedEventArgs e)

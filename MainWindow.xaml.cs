@@ -2,6 +2,7 @@
 using Microsoft.VisualBasic;
 using Microsoft.Win32;
 using System;
+using System.Buffers.Binary;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.IO;
@@ -62,9 +63,9 @@ namespace Memory_InSchritten
 
         private readonly List<(int,int)> Moves = [];
 
-        private static readonly List<string> Servers = ["public.memory-server.com"]; //, "10.10.77.58", "10.10.79.182", "192.168.178.34"];
+        private static readonly List<string> Servers = ["memory-server.francesco.kuberneteslv.dmz.becksche.de"]; //, "10.10.77.58", "10.10.79.182", "192.168.178.34"];
 
-        private const int GamePort = 31322;
+        private const int GamePort = 80; //51322
 
         private TcpClient? _client;
 
@@ -83,6 +84,7 @@ namespace Memory_InSchritten
         private async Task SendString(string data)
         {
             byte[] bytes = Encoding.UTF8.GetBytes(data);
+            if (bytes.Length > 256) throw new InvalidDataException("String exceeds 256 bytes.");
 
             await SendInt(bytes.Length);
             await SendBytes(bytes);
@@ -92,43 +94,44 @@ namespace Memory_InSchritten
         {
             var length = await ReadInt();
 
-            if (length is <= 0) return "";
+            if (length == 0) return "";
+            if (length < 0 || length > 256) throw new InvalidDataException("Invalid string length.");
 
-            byte[] dataBytes = await ReadBytes((int)length);
+            byte[] dataBytes = await ReadBytes(length);
             return Encoding.UTF8.GetString(dataBytes);
         }
 
         private async Task SendInt(int n)
         {
-            byte[] bytes = BitConverter.GetBytes(n);
+            byte[] bytes = new byte[sizeof(int)];
+            BinaryPrimitives.WriteInt32LittleEndian(bytes, n);
             await SendBytes(bytes);
         }
 
         private async Task<int> ReadInt()
         {
             byte[] dataBytes = await ReadBytes(sizeof(int));
-            return BitConverter.ToInt32(dataBytes, 0);
+            return BinaryPrimitives.ReadInt32LittleEndian(dataBytes);
         }
 
-        private async Task SendBytes(byte[] Object)
+        private async Task SendBytes(byte[] data)
         {
             NetworkStream stream = _client!.GetStream();
 
-            await stream.FlushAsync();
-            await stream.WriteAsync(Object);
-            await stream.FlushAsync();
+            await stream.WriteAsync(data);
         }
 
         private async Task<byte[]> ReadBytes(int expectedSize)
         {
-            if (expectedSize is <0 or >256) return [];
+            if (expectedSize is <= 0 or > 256) throw new InvalidDataException("Invalid frame length.");
             NetworkStream stream = _client!.GetStream();
             byte[] buffer = new byte[expectedSize];
             int totalRead = 0;
 
             while (totalRead < expectedSize)
             {
-                int bytesRead = await stream.ReadAsync(buffer.AsMemory(totalRead, expectedSize - totalRead));
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                int bytesRead = await stream.ReadAsync(buffer.AsMemory(totalRead, expectedSize - totalRead), timeout.Token);
                 if (bytesRead == 0)
                 {
                     throw new Exception("Connection lost");
@@ -152,44 +155,32 @@ namespace Memory_InSchritten
             return (row, column);
         }
 
-        private async Task HandleRequests()
+        private async Task<bool> HandleRequests()
         {
-            string command = "None";
-            try
+            var command = await ReadString();
+            switch (command)
             {
-                command = await ReadString();
-                switch (command)
-                {
-                    case "Read":
-                        await SendString("ACK");
-                        await ReadCard();
-                        await SendString("OK");
-                        break;
-                    case "Send":
-                        await SendString("ACK");
-                        await SendCard();
-                        await SendString("OK");
-                        break;
-                    case "Sync":
-                        await SendString("ACK");
-                        await Resync();
-                        await SendString("OK");
-                        break;
-                    case "End":
-                        await SendString("ACK");
-                        await SendString("OK");
-                        await Reset();
-                        break;
-                    default:
-                        await SendString("FAIL");
-                        break;
-                }
-            }
-            catch (Exception e)
-            {
-                if (command == "None") return;
-                MessageBox.Show($"[HandleRequest:{command}] {e.Message}", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
-                await Reset(true);
+                case "Read":
+                    await SendString("ACK");
+                    await ReadCard();
+                    await SendString("OK");
+                    return true;
+                case "Send":
+                    await SendString("ACK");
+                    await SendCard();
+                    await SendString("OK");
+                    return true;
+                case "Sync":
+                    await SendString("ACK");
+                    await Resync();
+                    await SendString("OK");
+                    return true;
+                case "End":
+                    await SendString("ACK");
+                    await SendString("OK");
+                    return false;
+                default:
+                    throw new InvalidDataException($"Unknown server command: {command}");
             }
         }
 
@@ -210,12 +201,22 @@ namespace Memory_InSchritten
             await Shuffle();
 
             var count = await ReadInt();
+            if (count < 0) throw new InvalidDataException("Invalid move history length.");
             silent = true;
-            for (var i=0; i<count; i++)
+            try
             {
-                await SendCard();
+                for (var i = 0; i < count; i++) await SendCard();
             }
-            silent = false;
+            finally
+            {
+                silent = false;
+            }
+            p1Elo -= p1Score;
+            p2Elo -= p2Score;
+            Player1.Elo.Content = "ELO: " + (p1Elo + p1Score);
+            Player2.Elo.Content = "ELO: " + (p2Elo + p2Score);
+            Player1.CalcFontSize();
+            Player2.CalcFontSize();
         }
 
         private async Task SetElo()
@@ -228,7 +229,13 @@ namespace Memory_InSchritten
 
         private async Task ReadCard()
         {
-            while (Moves.Count == 0)  await Task.Delay(10);
+            _allowMove = true;
+            while (Moves.Count == 0)
+            {
+                if (_client!.Client.Poll(0, SelectMode.SelectRead) && _client.Available == 0)
+                    throw new IOException("Connection lost while waiting for a move.");
+                await Task.Delay(100);
+            }
             await SendRowCol(Moves[0]);
             Moves.RemoveAt(0);
         }
@@ -237,55 +244,62 @@ namespace Memory_InSchritten
         {
             (var row, var column) = await ReadRowCol();
 
-            _allowMove = true;
-
             Button btn = Grid.Children.OfType<Button>().FirstOrDefault(b => (int)b.GetValue(Grid.RowProperty) == row && (int)b.GetValue(Grid.ColumnProperty) == column)!;
+            if (btn is null || !btn.IsHitTestVisible) throw new InvalidDataException("Invalid card in move history.");
             while (Open.Count > 1) await Task.Delay(10);
-            ShowCard(btn, new RoutedEventArgs());
+            RevealCard(btn);
         }
 
         private async Task StartClient()
         {
             if (!Online) return;
 
-            try
+            while (Online)
             {
-                _ = ShowDialog("Verbindung wird aufgebaut...", true);
-                foreach (var ip in Servers)
+                try
                 {
-                    _client = new TcpClient();
-                    try
+                    _ = ShowDialog("Verbindung wird aufgebaut...", true);
+                    foreach (var ip in Servers)
                     {
-                        await Task.WhenAny(_client.ConnectAsync(ip, GamePort), Task.Delay(2000));
-                        if (!_client.Connected) throw new SocketException();
-                        break;
+                        var candidate = new TcpClient();
+                        try
+                        {
+                            await candidate.ConnectAsync(ip, GamePort).WaitAsync(TimeSpan.FromSeconds(2));
+                            _client = candidate;
+                            break;
+                        }
+                        catch
+                        {
+                            candidate.Dispose();
+                        }
                     }
-                    catch
+
+                    if (_client is null) throw new IOException("No server is reachable.");
+                    await SendString(_Id ?? "");
+                    if (string.IsNullOrWhiteSpace(_Id))
                     {
-                        _client.Close();
+                        _Id = await ReadString();
+                        if (string.IsNullOrWhiteSpace(_Id)) throw new InvalidDataException("Server sent an empty player ID.");
+                        File.WriteAllText("id.txt", _Id);
                     }
-                }
 
-                await SendString(_Id ?? "");
-                if (_Id is null)
+                    await ShowDialog("Verbindung zum Server hergestellt!");
+                    while (Online && await HandleRequests()) { }
+                    if (Online) await Reset(false, false);
+                }
+                catch (Exception e)
                 {
-                    _Id = await ReadString();
-                    File.WriteAllText("id.txt", _Id);
+                    Debug.WriteLine($"[StartClient] {e}");
+                    if (!Online) return;
+                    await Reset(true, false);
+                    _ = ShowDialog("Verbindung unterbrochen. Neuer Versuch...", true);
+                    await Task.Delay(1000);
                 }
-
-                await ShowDialog("Verbindung zum Server hergestellt!");
-
-                while (Online)
+                finally
                 {
-                    await HandleRequests();
+                    _client?.Dispose();
+                    _client = null;
                 }
-
-                throw new Exception("Verbindung zum Server verloren");
-            }
-            catch (Exception e)
-            {
-                Online = false;
-                MessageBox.Show($"[StartClient] {e.Message}", "Memory", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -382,7 +396,7 @@ namespace Memory_InSchritten
 
             if (Online)
             {
-                if (!nameSet) await SendString(Player1.PlayerName.Text);
+                await SendString(Player1.PlayerName.Text);
                 _ = ShowDialog("Suche nach Gegner...", true);
                 Player2.PlayerName.Text = await ReadString();
                 await ShowDialog("Gegner gefunden!");
@@ -437,6 +451,8 @@ namespace Memory_InSchritten
 
         private async Task SetCardCount()
         {
+            if (Cards.Count < 4 || Cards.Count > 256 || Cards.Count % 4 != 0)
+                throw new InvalidDataException("The selected card set must contain a multiple of four cards.");
             await SendInt(Cards.Count);
         }
 
@@ -445,9 +461,13 @@ namespace Memory_InSchritten
             if (Online)
             {
                 cardCount = await ReadInt();
+                if (cardCount < 4 || cardCount > Cards.Count || cardCount % 4 != 0)
+                    throw new InvalidDataException("Invalid negotiated card count.");
+                Cards.RemoveRange(cardCount, Cards.Count - cardCount);
                 for (var i = 0; i < cardCount; i++)
                 {
                     var index = await ReadInt();
+                    if (index < i || index >= cardCount) throw new InvalidDataException("Invalid shuffle index.");
                     (Cards[i], Cards[index]) = (Cards[index], Cards[i]);
                 }
             }
@@ -466,7 +486,7 @@ namespace Memory_InSchritten
         private void LoadCards()
         {
             var index = 0;
-            foreach (var file in Directory.GetFiles(cardPath))
+            foreach (var file in Directory.GetFiles(cardPath).OrderBy(System.IO.Path.GetFileName, StringComparer.Ordinal))
             {
                 if (++index > 10) break;
                 Cards.Add(file);
@@ -504,7 +524,11 @@ namespace Memory_InSchritten
 
         private void CoverCards()
         {
-            if (!silent) MessageBox.Show("Die Karten werden gedeckt", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
+            if (!silent)
+            {
+                if (Online) _ = ShowDialog("Die Karten werden gedeckt");
+                else MessageBox.Show("Die Karten werden gedeckt", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
 
             player1turn = !player1turn;
             Player1.Rect.Fill = player1turn ? Brushes.DeepSkyBlue : Brushes.LightGray;
@@ -534,15 +558,24 @@ namespace Memory_InSchritten
             Player2.Elo.Content = "ELO: " + (p2Elo + p2Score);
             Player1.CalcFontSize();
             Player2.CalcFontSize();
-            if (end)
+            if (end && !silent)
             {
-                MessageBox.Show($"Spiel beendet!{Environment.NewLine}{(p1Score > p2Score ? Player1.PlayerName.Text : p1Score < p2Score ? Player2.PlayerName.Text : "Niemand")} gewinnt", "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
+                var result = $"Spiel beendet!{Environment.NewLine}{(p1Score > p2Score ? Player1.PlayerName.Text : p1Score < p2Score ? Player2.PlayerName.Text : "Niemand")} gewinnt";
+                if (Online) _ = ShowDialog(result);
+                else MessageBox.Show(result, "Memory", MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
         private void ShowCard(object sender, RoutedEventArgs e)
         {
             if (sender is not Button btn) return;
-            if (!_allowMove && Online && !player1turn) return;
+            if (Online && (!player1turn || !_allowMove)) return;
+
+            RevealCard(btn);
+        }
+
+        private void RevealCard(Button btn)
+        {
+            if (!btn.IsHitTestVisible) return;
 
             _allowMove = false;
             bool pair = false;
@@ -576,9 +609,10 @@ namespace Memory_InSchritten
             Online = msg == MessageBoxResult.Yes;
         }
 
-        private async Task Reset(bool reconnect=false)
+        private async Task Reset(bool reconnect=false, bool startClient=true)
         {
-            while (Moves.Count > 0 && Online) await Task.Delay(500);
+            Moves.Clear();
+            _allowMove = false;
             _client?.Close();
             _client?.Dispose();
 
@@ -592,7 +626,7 @@ namespace Memory_InSchritten
             Player1.Score.Content = "0";
             Player2.Score.Content = "0";
 
-            Player2.Elo.Content = "0";
+            Player2.Elo.Content = "ELO: 0";
             Player2.PlayerName.Text = "";
 
             cardPath = Directory.GetCurrentDirectory() + @"\bilder\";
@@ -608,7 +642,7 @@ namespace Memory_InSchritten
 
             if (Online)
             {
-                await StartClient();
+                if (startClient) await StartClient();
             }
             else
             {

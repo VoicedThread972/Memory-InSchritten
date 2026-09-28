@@ -1,0 +1,14 @@
+<Window x:Class="MemoryInSchritten.Client.Views.NameDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Memory" SizeToContent="WidthAndHeight" ResizeMode="NoResize" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner" FocusManager.FocusedElement="{Binding ElementName=Input}">
+    <StackPanel Margin="12" Width="260">
+        <TextBlock x:Name="Prompt" Margin="0,0,0,8" />
+        <TextBox x:Name="Input" MaxLength="32" TextChanged="Input_TextChanged" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button x:Name="OkButton" Content="OK" IsDefault="True" Width="80" Click="Ok_Click" />
+            <Button Content="Abbrechen" IsCancel="True" Width="80" Margin="8,0,0,0" />
+        </StackPanel>
+    </StackPanel>
+</Window>
